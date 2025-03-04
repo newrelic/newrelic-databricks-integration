@@ -1,20 +1,20 @@
-<a href="https://opensource.newrelic.com/oss-category/#new-relic-experimental"><picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/newrelic/opensource-website/raw/main/src/images/categories/dark/Experimental.png"><source media="(prefers-color-scheme: light)" srcset="https://github.com/newrelic/opensource-website/raw/main/src/images/categories/Experimental.png"><img alt="New Relic Open Source experimental project banner." src="https://github.com/newrelic/opensource-website/raw/main/src/images/categories/Experimental.png"></picture></a>
+[![Community Project header](https://github.com/newrelic/open-source-office/raw/master/examples/categories/images/Community_Project.png)](https://github.com/newrelic/open-source-office/blob/master/examples/categories/index.md#category-community-project)
 
-![GitHub forks](https://img.shields.io/github/forks/newrelic-experimental/newrelic-databricks-integration?style=social)
-![GitHub stars](https://img.shields.io/github/stars/newrelic-experimental/newrelic-databricks-integration?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/newrelic-experimental/newrelic-databricks-integration?style=social)
+![GitHub forks](https://img.shields.io/github/forks/newrelic/newrelic-databricks-integration?style=social)
+![GitHub stars](https://img.shields.io/github/stars/newrelic/newrelic-databricks-integration?style=social)
+![GitHub watchers](https://img.shields.io/github/watchers/newrelic/newrelic-databricks-integration?style=social)
 
-![GitHub all releases](https://img.shields.io/github/downloads/newrelic-experimental/newrelic-databricks-integration/total)
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/newrelic-experimental/newrelic-databricks-integration)
-![GitHub last commit](https://img.shields.io/github/last-commit/newrelic-experimental/newrelic-databricks-integration)
-![GitHub Release Date](https://img.shields.io/github/release-date/newrelic-experimental/newrelic-databricks-integration)
+![GitHub all releases](https://img.shields.io/github/downloads/newrelic/newrelic-databricks-integration/total)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/newrelic/newrelic-databricks-integration)
+![GitHub last commit](https://img.shields.io/github/last-commit/newrelic/newrelic-databricks-integration)
+![GitHub Release Date](https://img.shields.io/github/release-date/newrelic/newrelic-databricks-integration)
 
-![GitHub issues](https://img.shields.io/github/issues/newrelic-experimental/newrelic-databricks-integration)
-![GitHub issues closed](https://img.shields.io/github/issues-closed/newrelic-experimental/newrelic-databricks-integration)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/newrelic-experimental/newrelic-databricks-integration)
-![GitHub pull requests closed](https://img.shields.io/github/issues-pr-closed/newrelic-experimental/newrelic-databricks-integration)
+![GitHub issues](https://img.shields.io/github/issues/newrelic/newrelic-databricks-integration)
+![GitHub issues closed](https://img.shields.io/github/issues-closed/newrelic/newrelic-databricks-integration)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/newrelic/newrelic-databricks-integration)
+![GitHub pull requests closed](https://img.shields.io/github/issues-pr-closed/newrelic/newrelic-databricks-integration)
 
-# New Relic Databricks Integration
+# Databricks Integration
 
 This integration collects telemetry from Databricks (including Spark on
 Databricks) and/or Spark telemetry from any Spark deployment. See the
@@ -65,37 +65,36 @@ Databricks) and/or Spark telemetry from any Spark deployment. See the
 
 ## Getting Started
 
-To get started with the New Relic Databricks integration,
-[deploy the integration](#on-host) using a supported deployment type,
-[configure](#configuration) the integration using supported configuration
-mechanisms, and then [import](https://docs.newrelic.com/docs/query-your-data/explore-query-data/dashboards/dashboards-charts-import-export-data/#import-json)
-the [sample dashboard](./examples/spark-dashboard.json).
+To get started with the Databricks Integration, [deploy the integration](#on-host)
+using a supported deployment type, [configure](#configuration) the integration
+using supported configuration mechanisms, and optionally
+[import](https://docs.newrelic.com/docs/query-your-data/explore-query-data/dashboards/dashboards-charts-import-export-data/#import-json)
+the sample dashboards included in the [examples](./examples/) directory.
 
 ### On-host
 
-The New Relic Databricks integration can be run on any supported host platform.
-The integration will collect Databricks telemetry (including Spark on
-Databricks) via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
+The Databricks Integration can be run on any supported host platform. The
+integration will collect Databricks telemetry (including Spark on Databricks)
+via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
 using the [Databricks SDK for Go](https://docs.databricks.com/en/dev-tools/sdk-go.html)
 and/or Spark telemetry from a non-Databricks Spark deployment via the
 [Spark ReST API](https://spark.apache.org/docs/3.5.2/monitoring.html#rest-api).
 
-The New Relic Databricks integration can also be deployed on the driver node of
-a Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+The Databricks Integration can also be deployed on the driver node of a
+Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
 using the provided [init script](./init/cluster_init_integration.sh) to install
 and configure the integration at cluster startup time.
 
 #### Deploy the integration on a host
 
-The New Relic Databricks integration provides binaries for the following
-host platforms.
+The Databricks Integration provides binaries for the following host platforms.
 
 * Linux amd64
 * Windows amd64
 
 To run the Databricks integration on a host, perform the following steps.
 
-1. Download the appropriate archive for your platform from the [latest release](https://github.com/newrelic-experimental/newrelic-databricks-integration/releases).
+1. Download the appropriate archive for your platform from the [latest release](https://github.com/newrelic/newrelic-databricks-integration/releases).
 1. Extract the archive to a new or existing directory.
 1. Create a directory named `configs` in the same directory.
 1. Create a file named `config.yml` in the `configs` directory and copy the
@@ -110,8 +109,8 @@ To run the Databricks integration on a host, perform the following steps.
 
 #### Deploy the integration on the driver node of a Databricks cluster
 
-The New Relic Databricks integration can be deployed on the driver node of a
-Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+The Databricks Integration can be deployed on the driver node of a Databricks
+[cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
 using a [cluster-scoped init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html).
 The [init script](./init/cluster_init_integration.sh) uses custom
 [environment variables](https://docs.databricks.com/en/compute/configure.html#env-var)
@@ -176,28 +175,28 @@ the cluster following the configuration of the environment variables.
 
 ## Features
 
-The New Relic Databricks integration supports the following capabilities.
+The Databricks Integration supports the following capabilities.
 
 * Collect Spark telemetry
 
-  The New Relic Databricks integration can collect telemetry from Spark running
+  The Databricks Integration can collect telemetry from Spark running
   on Databricks. By default, the integration will automatically connect to
   and collect telemetry from the Spark deployments in all clusters created via
   the UI or API in the specified workspace.
 
-  The New Relic Databricks integration can also collect Spark telemetry from any
+  The Databricks Integration can also collect Spark telemetry from any
   non-Databricks Spark deployment.
 
 * Collect Databricks consumption and cost data
 
-  The New Relic Databricks integration can collect consumption and cost related
+  The Databricks Integration can collect consumption and cost related
   data from the Databricks [system tables](https://docs.databricks.com/en/admin/system-tables/index.html).
   This data can be used to show Databricks DBU consumption metrics and estimated
   Databricks costs directly within New Relic.
 
 * Collect Databricks job run telemetry
 
-  The New Relic Databricks integration can collect telemetry about
+  The Databricks Integration can collect telemetry about
   [Databricks Job](https://docs.databricks.com/en/jobs/index.html#what-are-databricks-jobs)
   runs, such as job run durations, task run durations, the current state of job
   and task runs, if a job or a task is a retry, and the number of times a task
@@ -205,7 +204,7 @@ The New Relic Databricks integration supports the following capabilities.
 
 * Collect Databricks Delta Live Tables Pipeline event logs
 
-  The New Relic Databricks integration can collect [Databricks Delta Live Tables Pipeline event logs](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
+  The Databricks Integration can collect [Databricks Delta Live Tables Pipeline event logs](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
   for all [Databricks Delta Live Tables Pipelines](https://docs.databricks.com/en/delta-live-tables/develop-pipelines.html)
   defined in a [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
   [Databricks Delta Live Tables Pipeline event log](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
@@ -708,10 +707,10 @@ collect [consumption and cost data](#consumption--cost-data).
 
 This flag can be used to disable the collection of consumption and cost data by
 the Databricks collector. This may be useful when running multiple instances of
-the New Relic Databricks integration. In this scenario, Databricks consumption
-and cost data collection should _only_ be enabled on a single instance.
-Otherwise, this data will be recorded more than once in New Relic, affecting
-consumption and cost calculations.
+the Databricks Integration. In this scenario, Databricks consumption and cost
+data collection should _only_ be enabled on a single instance. Otherwise, this
+data will be recorded more than once in New Relic, affecting consumption and
+cost calculations.
 
 ###### `warehouseId`
 
@@ -835,8 +834,7 @@ collect [job run data](#job-run-data).
 
 This flag can be used to disable the collection of job run data by the
 Databricks collector. This may be useful when running multiple instances of the
-New Relic Databricks integration against the same Databricks
-[workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
+Databricks Integration against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
 In this scenario, Databricks job run data collection should _only_ be enabled on
 a single instance of the integration. Otherwise, this data will be recorded more
 than once in New Relic, affecting product features that use [job run metrics](#job-run-metrics)
@@ -933,8 +931,8 @@ collect Databricks Delta Live Tables [pipeline event logs](#pipeline-event-logs)
 
 This flag can be used to disable the collection of Databricks Delta Live Tables
 [pipeline event logs](#pipeline-event-logs) by the Databricks collector. This
-may be useful when running multiple instances of the New Relic Databricks
-integration against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
+may be useful when running multiple instances of the Databricks Integration
+against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
 In this scenario, the collection of Databricks Delta Live Tables [pipeline event logs](#pipeline-event-logs)
 should _only_ be enabled on a single instance of the integration. Otherwise,
 duplicate New Relic log entries will be created for each Databricks Delta Live
@@ -959,8 +957,8 @@ collect Databricks Delta Live Tables [pipeline update metrics](#pipeline-update-
 
 This flag can be used to disable the collection of Databricks Delta Live Tables
 [pipeline update metrics](#pipeline-update-metrics) by the Databricks collector.
-This may be useful when running multiple instances of the New Relic Databricks
-integration against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
+This may be useful when running multiple instances of the Databricks Integration
+against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
 In this scenario, the collection of Databricks Delta Live Tables [pipeline update metrics](#pipeline-update-metrics)
 should _only_ be enabled on a single instance of the integration. Otherwise,
 Databricks Delta Live Tables [pipeline update metrics](#pipeline-update-metrics)
@@ -1109,7 +1107,7 @@ For convenience purposes, the following parameters can be used in the
 
 ### Apache Spark Data
 
-The New Relic Databricks integration can collect [Apache Spark](https://spark.apache.org/docs/latest/index.html)
+The Databricks Integration can collect [Apache Spark](https://spark.apache.org/docs/latest/index.html)
 [application](https://spark.apache.org/docs/latest/submitting-applications.html)
 metrics for all running applications in a given [Spark cluster](https://spark.apache.org/docs/3.5.4/cluster-overview.html).
 Metrics are collected by accessing the monitoring [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api)
@@ -1768,8 +1766,8 @@ NRQL statements to use to visualize the data.
 
 ### Consumption & Cost Data
 
-The New Relic Databricks integration can collect Databricks consumption and cost
-related data from the Databricks [system tables](https://docs.databricks.com/en/admin/system-tables/index.html).
+The Databricks Integration can collect Databricks consumption and cost related
+data from the Databricks [system tables](https://docs.databricks.com/en/admin/system-tables/index.html).
 This data can be used to show Databricks DBU consumption metrics and estimated
 Databricks costs directly within New Relic.
 
@@ -1796,8 +1794,8 @@ collect Job cost data.
 
 #### Consumption and Cost Collection Requirements
 
-In order for the New Relic Databricks integration to collect consumption and
-cost related data from Databricks, there are several requirements.
+In order for the Databricks Integration to collect consumption and cost related
+data from Databricks, there are several requirements.
 
 1. The SQL [warehouse ID](#warehouseid) of a [SQL warehouse](https://docs.databricks.com/en/compute/sql-warehouse/index.html)
    within the workspace associated with the configured [workspace host](#workspacehost)
@@ -2021,8 +2019,7 @@ This query produces `DatabricksJobCost` events with the following attributes.
 
 ### Job Run Data
 
-The New Relic Databricks integration can collect telemetry about
-[Databricks Job](https://docs.databricks.com/en/jobs/index.html#what-are-databricks-jobs)
+The Databricks Integration can collect telemetry about [Databricks Job](https://docs.databricks.com/en/jobs/index.html#what-are-databricks-jobs)
 runs, such as job run durations, task run durations, the current state of job
 and task runs, if a job or a task is a retry, and the number of times a task was
 retried. This feature is enabled by default and can be enabled or disabled using
@@ -2314,7 +2311,7 @@ statements to use to visualize the data.
 
 ### Pipeline Update Metrics
 
-The New Relic Databricks integration can collect telemetry about
+The Databricks Integration can collect telemetry about
 [Databricks Delta Live Tables Pipeline](https://docs.databricks.com/en/delta-live-tables/develop-pipelines.html)
 [updates](https://docs.databricks.com/en/delta-live-tables/updates.html), such
 as [flow](https://docs.databricks.com/aws/en/delta-live-tables/flows) durations,
@@ -2709,7 +2706,7 @@ displayed and the NRQL statements to use to visualize the data.
 
 ### Pipeline Event Logs
 
-The New Relic Databricks integration can collect [Databricks Delta Live Tables Pipeline event logs](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
+The Databricks Integration can collect [Databricks Delta Live Tables Pipeline event logs](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
 for all [Databricks Delta Live Tables Pipelines](https://docs.databricks.com/en/delta-live-tables/develop-pipelines.html)
 defined in a [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
 [Databricks Delta Live Tables Pipeline event log](https://docs.databricks.com/en/delta-live-tables/observability.html#event-log)
@@ -3094,5 +3091,5 @@ would not be what it is today.
 
 ### License
 
-The New Relic Databricks Integration project is licensed under the
+The Databricks Integration project is licensed under the
 [Apache 2.0](http://apache.org/licenses/LICENSE-2.0.txt) License.
