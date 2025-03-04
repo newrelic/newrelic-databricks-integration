@@ -1,4 +1,4 @@
-module github.com/newrelic-experimental/newrelic-databricks-integration
+module github.com/newrelic/newrelic-databricks-integration
 
 go 1.21
 

@@ -14,7 +14,7 @@ NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE="newrelic-databricks-integration_Linux_x86_
 # Download the newrelic databricks integration release archive, unpack it, and
 # move the binary into place
 mkdir -p $NEW_RELIC_DATABRICKS_TMP_DIR
-curl -o $NEW_RELIC_DATABRICKS_TMP_DIR/$NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE -L https://github.com/newrelic-experimental/newrelic-databricks-integration/releases/latest/download/$NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE
+curl -o $NEW_RELIC_DATABRICKS_TMP_DIR/$NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE -L https://github.com/newrelic/newrelic-databricks-integration/releases/latest/download/$NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE
 cd $NEW_RELIC_DATABRICKS_TMP_DIR && tar zvxf $NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE
 mkdir -p $NEW_RELIC_DATABRICKS_TARGET_DIR
 cp $NEW_RELIC_DATABRICKS_TMP_DIR/newrelic-databricks-integration $NEW_RELIC_DATABRICKS_TARGET_DIR
