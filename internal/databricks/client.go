@@ -6,7 +6,7 @@ import (
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkClient "github.com/databricks/databricks-sdk-go/client"
-	"github.com/newrelic-experimental/newrelic-databricks-integration/internal/spark"
+	"github.com/newrelic/newrelic-databricks-integration/internal/spark"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/connectors"
 )
 

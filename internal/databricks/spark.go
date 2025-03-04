@@ -8,7 +8,7 @@ import (
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkCompute "github.com/databricks/databricks-sdk-go/service/compute"
-	"github.com/newrelic-experimental/newrelic-databricks-integration/internal/spark"
+	"github.com/newrelic/newrelic-databricks-integration/internal/spark"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/model"

@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/newrelic-experimental/newrelic-databricks-integration/internal/databricks"
-	"github.com/newrelic-experimental/newrelic-databricks-integration/internal/spark"
+	"github.com/newrelic/newrelic-databricks-integration/internal/databricks"
+	"github.com/newrelic/newrelic-databricks-integration/internal/spark"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/spf13/viper"
