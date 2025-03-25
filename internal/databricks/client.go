@@ -53,9 +53,18 @@ func (s *DatabricksSparkApiClient) GetApplications(
 	// the databricksClient on the WorkspaceClient
 
 	path := s.sparkContextUiPath + "/api/v1/applications"
+	queryParams := make(map[string]any)
 	headers := makeHeaders()
 
-	err := s.client.Do(ctx, http.MethodGet, path, headers, nil, &sparkApps)
+	err := s.client.Do(
+		ctx,
+		http.MethodGet,
+		path,
+		headers,
+		queryParams,
+		nil,
+		&sparkApps,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -70,9 +79,18 @@ func (s *DatabricksSparkApiClient) GetApplicationExecutors(
 	executors := []spark.SparkExecutor{}
 
 	path := s.sparkContextUiPath + "/api/v1/applications/" + app.Id + "/executors"
+	queryParams := make(map[string]any)
 	headers := makeHeaders()
 
-	err := s.client.Do(ctx, http.MethodGet, path, headers, nil, &executors)
+	err := s.client.Do(
+		ctx,
+		http.MethodGet,
+		path,
+		headers,
+		queryParams,
+		nil,
+		&executors,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -87,9 +105,18 @@ func (s *DatabricksSparkApiClient) GetApplicationJobs(
 	jobs := []spark.SparkJob{}
 
 	path := s.sparkContextUiPath + "/api/v1/applications/" + app.Id + "/jobs"
+	queryParams := make(map[string]any)
 	headers := makeHeaders()
 
-	err := s.client.Do(ctx, http.MethodGet, path, headers, nil, &jobs)
+	err := s.client.Do(
+		ctx,
+		http.MethodGet,
+		path,
+		headers,
+		queryParams,
+		nil,
+		&jobs,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +131,18 @@ func (s *DatabricksSparkApiClient) GetApplicationStages(
 	stages := []spark.SparkStage{}
 
 	path := s.sparkContextUiPath + "/api/v1/applications/" + app.Id + "/stages?details=true"
+	queryParams := make(map[string]any)
 	headers := makeHeaders()
 
-	err := s.client.Do(ctx, http.MethodGet, path, headers, nil, &stages)
+	err := s.client.Do(
+		ctx,
+		http.MethodGet,
+		path,
+		headers,
+		queryParams,
+		nil,
+		&stages,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +157,18 @@ func (s *DatabricksSparkApiClient) GetApplicationRDDs(
 	rdds := []spark.SparkRDD{}
 
 	path := s.sparkContextUiPath + "/api/v1/applications/" + app.Id + "/storage/rdd"
+	queryParams := make(map[string]any)
 	headers := makeHeaders()
 
-	err := s.client.Do(ctx, http.MethodGet, path, headers, nil, &rdds)
+	err := s.client.Do(
+		ctx,
+		http.MethodGet,
+		path,
+		headers,
+		queryParams,
+		nil,
+		&rdds,
+	)
 	if err != nil {
 		return nil, err
 	}
