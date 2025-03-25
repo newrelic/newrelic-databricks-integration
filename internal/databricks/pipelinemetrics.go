@@ -27,7 +27,7 @@ func newPipelineEventClient(w *databricksSdk.WorkspaceClient) (*pipelineEventCli
 	cfg := w.Config
 
 	// The following 10 lines are taken from the WorkspaceClient code at
-	// https://github.com/databricks/databricks-sdk-go/blob/v0.58.1/workspace_client.go#L1157
+	// https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/workspace_client.go#L1161
 	// We do it ourselves here since we don't have access to either the
 	// apiClient or databricksClient on the WorkspaceClient.
 	apiClient, err := cfg.NewApiClient()
@@ -79,7 +79,7 @@ type PipelineEventDetails struct {
 }
 
 // Below copied from
-// https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/model.go#L967
+// https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/service/pipelines/model.go#L1021
 // in order to support pipeline events with details field until SDK supports it
 
 type PipelineEvent struct {
@@ -107,11 +107,11 @@ type PipelineEvent struct {
 	// of the ReST API.
 	Details *PipelineEventDetails `json:"details,omitempty"`
 
-	ForceSendFields []string `json:"-"`
+	ForceSendFields []string `json:"-" url:"-"`
 }
 
 // Below copied from
-// https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/model.go#L528
+// https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/service/pipelines/model.go#L582
 // in order to support pipeline events with details field until SDK supports it
 
 type ListPipelineEventsResponse struct {
@@ -122,7 +122,7 @@ type ListPipelineEventsResponse struct {
 	// If present, a token to fetch the previous page of events.
 	PrevPageToken string `json:"prev_page_token,omitempty"`
 
-	ForceSendFields []string `json:"-"`
+	ForceSendFields []string `json:"-" url:"-"`
 }
 
 func (s *ListPipelineEventsResponse) UnmarshalJSON(b []byte) error {
@@ -134,27 +134,28 @@ func (s ListPipelineEventsResponse) MarshalJSON() ([]byte, error) {
 }
 
 // Below copied from
-// https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/impl.go#L73
+// https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/service/pipelines/impl.go#L117
 // in order to support pipeline events with details field until SDK supports it
 
-func (a *pipelineEventClient) ListPipelineEvents(ctx context.Context, request databricksSdkPipelines.ListPipelineEventsRequest) (*ListPipelineEventsResponse, error) {
+func (a *pipelineEventClient) internalListPipelineEvents(ctx context.Context, request databricksSdkPipelines.ListPipelineEventsRequest) (*ListPipelineEventsResponse, error) {
 	var listPipelineEventsResponse ListPipelineEventsResponse
 	path := fmt.Sprintf("/api/2.0/pipelines/%v/events", request.PipelineId)
+	queryParams := make(map[string]any)
 	headers := make(map[string]string)
 	headers["Accept"] = "application/json"
-	err := a.client.Do(ctx, http.MethodGet, path, headers, request, &listPipelineEventsResponse)
+	err := a.client.Do(ctx, http.MethodGet, path, headers, queryParams, request, &listPipelineEventsResponse)
 	return &listPipelineEventsResponse, err
 }
 
 // Below temporarily copied from
-// https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/api.go#L366
+// https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/service/pipelines/impl.go#L84
 // in order to support pipeline events with details field until SDK supports it
 
 func (a *pipelineEventClient) listPipelineEvents(_ context.Context, request databricksSdkPipelines.ListPipelineEventsRequest) listing.Iterator[PipelineEvent] {
 
 	getNextPage := func(ctx context.Context, req databricksSdkPipelines.ListPipelineEventsRequest) (*ListPipelineEventsResponse, error) {
 		ctx = useragent.InContext(ctx, "sdk-feature", "pagination")
-		return a.ListPipelineEvents(ctx, req)
+		return a.internalListPipelineEvents(ctx, req)
 	}
 	getItems := func(resp *ListPipelineEventsResponse) []PipelineEvent {
 		return resp.Events
