@@ -2,13 +2,15 @@ package databricks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
-	"strings"
+	"time"
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkCompute "github.com/databricks/databricks-sdk-go/service/compute"
 	"github.com/newrelic/newrelic-databricks-integration/internal/spark"
+	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/model"
@@ -17,14 +19,67 @@ import (
 
 type DatabricksSparkReceiver struct {
 	w			*databricksSdk.WorkspaceClient
+	uiEnabled			bool
+	apiEnabled			bool
+	jobEnabled			bool
+	pipelineEnabled		bool
+	pollClusterTimeout	time.Duration
+	pollClusterTasks	int
 	tags		map[string]string
 }
 
 func NewDatabricksSparkReceiver(
+	i *integration.LabsIntegration,
 	w *databricksSdk.WorkspaceClient,
 	tags map[string]string,
 ) *DatabricksSparkReceiver {
-	return &DatabricksSparkReceiver{ w, tags }
+	viper.SetDefault("databricks.spark.clusterSources.ui", true)
+	viper.SetDefault("databricks.spark.clusterSources.api", true)
+	viper.SetDefault("databricks.spark.clusterSources.job", true)
+	viper.SetDefault("databricks.spark.clusterSources.pipeline", true)
+	// the `interval` config parameter is mistakenly cast directly to a
+	// time.Duration with no units in the SDK so here we need to cast it back to
+	// match the expected configuration type (an integer representing number of
+	// seconds)
+	viper.SetDefault("databricks.spark.pollClusterTimeout", int64(i.Interval))
+	viper.SetDefault("databricks.spark.pollClusterTasks", 5)
+
+	uiEnabled := viper.GetBool("databricks.spark.clusterSources.ui")
+	if viper.IsSet("databricks.sparkClusterSources.ui") {
+		uiEnabled = viper.GetBool("databricks.sparkClusterSources.ui")
+	}
+
+	apiEnabled := viper.GetBool("databricks.spark.clusterSources.api")
+	if viper.IsSet("databricks.sparkClusterSources.api") {
+		apiEnabled = viper.GetBool("databricks.sparkClusterSources.api")
+	}
+
+	jobEnabled := viper.GetBool("databricks.spark.clusterSources.job")
+	if viper.IsSet("databricks.sparkClusterSources.job") {
+		jobEnabled = viper.GetBool("databricks.sparkClusterSources.job")
+	}
+
+	pipelineEnabled := viper.GetBool("databricks.spark.clusterSources.pipeline")
+	if viper.IsSet("databricks.sparkClusterSources.pipeline") {
+		pipelineEnabled =
+			viper.GetBool("databricks.sparkClusterSources.pipeline")
+	}
+
+	pollClusterTimeout := time.Duration(viper.GetInt64(
+		"databricks.spark.pollClusterTimeout",
+	)) * time.Second
+	pollClusterTasks := viper.GetInt("databricks.spark.pollClusterTasks")
+
+	return &DatabricksSparkReceiver{
+		w,
+		uiEnabled,
+		apiEnabled,
+		jobEnabled,
+		pipelineEnabled,
+		pollClusterTimeout,
+		pollClusterTasks,
+		tags,
+	 }
 }
 
 func (d *DatabricksSparkReceiver) GetId() string {
@@ -38,59 +93,37 @@ func (d *DatabricksSparkReceiver) PollMetrics(
 	log.Debugf("polling for Spark metrics")
 
 	log.Debugf("listing all clusters")
-	all, err := d.w.Clusters.ListAll(
+	all := d.w.Clusters.List(
 		ctx,
 		databricksSdkCompute.ListClustersRequest{},
 	)
-	if err != nil {
-	  return fmt.Errorf("failed to list clusters: %w", err)
-	}
 
-	uiEnabled := true
-	if viper.IsSet("databricks.sparkClusterSources.ui") {
-		uiEnabled = viper.GetBool("databricks.sparkClusterSources.ui")
-	} else if viper.IsSet("databricks.spark.clusterSources.ui")  {
-		uiEnabled = viper.GetBool("databricks.spark.clusterSources.ui")
-	}
+	clusters := []*databricksSdkCompute.ClusterDetails{}
 
-	jobEnabled := true
-	if viper.IsSet("databricks.sparkClusterSources.job") {
-		jobEnabled = viper.GetBool("databricks.sparkClusterSources.job")
-	} else if viper.IsSet("databricks.spark.clusterSources.job")  {
-		jobEnabled = viper.GetBool("databricks.spark.clusterSources.job")
-	}
+	for ; all.HasNext(ctx); {
+		c, err := all.Next(ctx)
+		if err != nil {
+			return fmt.Errorf(
+				"error while retrieving cluster results: %w",
+				err,
+			)
+		}
 
-	apiEnabled := true
-	if viper.IsSet("databricks.sparkClusterSources.api") {
-		apiEnabled = viper.GetBool("databricks.sparkClusterSources.api")
-	} else if viper.IsSet("databricks.spark.clusterSources.api")  {
-		apiEnabled = viper.GetBool("databricks.spark.clusterSources.api")
-	}
-
-	for _, c := range all {
-		if c.ClusterSource != databricksSdkCompute.ClusterSourceUi &&
-			c.ClusterSource != databricksSdkCompute.ClusterSourceApi &&
-			c.ClusterSource != databricksSdkCompute.ClusterSourceJob {
+		if !isSupportedClusterSource(c.ClusterSource) {
 			log.Debugf(
-				"skipping cluster %s because cluster source %s is unsupported",
+				"skipping cluster %s (%s) because cluster source %s is unsupported",
 				c.ClusterName,
+				c.ClusterId,
 				c.ClusterSource,
 			)
 			continue
 		}
 
-		if (
-			c.ClusterSource == databricksSdkCompute.ClusterSourceUi &&
-			!uiEnabled ) ||
-			(
-				c.ClusterSource == databricksSdkCompute.ClusterSourceApi &&
-				!apiEnabled ) ||
-			(
-				c.ClusterSource == databricksSdkCompute.ClusterSourceJob &&
-				!jobEnabled ) {
+		if !d.isClusterSourceEnabled(c.ClusterSource) {
 			log.Debugf(
-				"skipping cluster %s because cluster source %s is disabled",
+				"skipping cluster %s (%s) because cluster source %s is disabled",
 				c.ClusterName,
+				c.ClusterId,
 				c.ClusterSource,
 			)
 			continue
@@ -98,147 +131,205 @@ func (d *DatabricksSparkReceiver) PollMetrics(
 
 		if c.State != databricksSdkCompute.StateRunning {
 			log.Debugf(
-				"skipping cluster %s with source %s because it is not running",
+				"skipping cluster %s (%s) with source %s because it is not running",
 				c.ClusterName,
+				c.ClusterId,
 				c.ClusterSource,
 			)
 			continue
 		}
 
-		/// resolve the spark context UI URL for the cluster
 		log.Debugf(
-			"resolving Spark context UI URL for cluster %s with source %s",
+			"adding cluster %s (%s) with source %s to cluster list",
 			c.ClusterName,
+			c.ClusterId,
 			c.ClusterSource,
 		)
-		sparkContextUiPath, err := getSparkContextUiPathForCluster(
+
+		clusters = append(clusters, &c)
+	}
+
+	start := 0
+	count := len(clusters)
+
+	for ;start < count; {
+		end := min(start + d.pollClusterTasks, count)
+
+		err := pollClusters(
 			ctx,
 			d.w,
-			&c,
-		)
-		if err != nil {
-			return err
-		}
-
-		databricksSparkApiClient, err := NewDatabricksSparkApiClient(
-			sparkContextUiPath,
-			d.w,
-		)
-		if err != nil {
-			return err
-		}
-
-		// Initialize spark pipelines
-		log.Debugf(
-			"polling metrics for cluster %s with spark context UI URL %s",
-			c.ClusterName,
-			sparkContextUiPath,
-		)
-
-		newTags := maps.Clone(d.tags)
-		newTags["clusterProvider"] = "databricks"
-		newTags["databricksClusterId"] = c.ClusterId
-		newTags["databricksClusterName"] = c.ClusterName
-
-		metricPrefix := ""
-		if viper.IsSet("databricks.sparkMetricPrefix") {
-			metricPrefix = viper.GetString("databricks.sparkMetricPrefix")
-		} else if viper.IsSet("databricks.spark.metricPrefix") {
-			metricPrefix = viper.GetString("databricks.spark.metricPrefix")
-		}
-
-		err = spark.PollMetrics(
-			ctx,
-			databricksSparkApiClient,
-			metricPrefix,
-			newTags,
+			d.pollClusterTimeout,
+			clusters[start:end],
+			d.tags,
 			writer,
 		)
 		if err != nil {
 			return err
 		}
+
+		start = end
 	}
 
 	return nil
 }
 
-func getSparkContextUiPathForCluster(
+func (d *DatabricksSparkReceiver) isClusterSourceEnabled(
+	source databricksSdkCompute.ClusterSource,
+) bool {
+	return (source == databricksSdkCompute.ClusterSourceUi && d.uiEnabled) ||
+		(
+			source == databricksSdkCompute.ClusterSourceApi &&
+			d.apiEnabled ) ||
+		(
+			source == databricksSdkCompute.ClusterSourceJob &&
+			d.jobEnabled ) ||
+		(
+			(source == databricksSdkCompute.ClusterSourcePipeline ||
+				source == databricksSdkCompute.ClusterSourcePipelineMaintenance) &&
+			d.pipelineEnabled )
+}
+
+func isSupportedClusterSource(source databricksSdkCompute.ClusterSource) bool {
+	return source == databricksSdkCompute.ClusterSourceUi ||
+		source == databricksSdkCompute.ClusterSourceApi ||
+		source == databricksSdkCompute.ClusterSourceJob ||
+		source == databricksSdkCompute.ClusterSourcePipeline ||
+		source == databricksSdkCompute.ClusterSourcePipelineMaintenance
+}
+
+func pollClusters(
+	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
+	pollClusterTimeout time.Duration,
+	clusters []*databricksSdkCompute.ClusterDetails,
+	tags map[string]string,
+	writer chan <- model.Metric,
+) error {
+	errChan := make(chan error)
+	count := len(clusters)
+	resultCount := 0
+	childCtx, cancel := context.WithCancel(ctx)
+
+	log.Debugf("processing %d clusters", count)
+
+	for _, cluster := range clusters {
+		go pollCluster(
+			childCtx,
+			w,
+			cluster,
+			errChan,
+			tags,
+			writer,
+		)
+	}
+
+	errs := []error{}
+	ticker := time.NewTicker(pollClusterTimeout)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case err := <- errChan:
+			// OK to append nil if result is nil because errors.Join() will
+			// discard them
+			errs = append(errs, err)
+
+			resultCount += 1
+
+			if resultCount == count {
+				// all poll goroutines have completed, call cancel to prevent
+				// child context leak
+				cancel()
+
+				// if all errors are nil, this returns nil, else an error which
+				// is the behavior we want
+				return errors.Join(errs...)
+			}
+
+		case <-ticker.C:
+			log.Debugf("poll cluster timeout ticked; calling cancel func")
+
+			cancel()
+
+			return fmt.Errorf(
+				"polling clusters failed to complete in a timely manner",
+			)
+
+		case <-ctx.Done():
+			// cancel received on parent context, call cancel to prevent child
+			// context leak
+			cancel()
+			return nil
+		}
+	}
+}
+
+func pollCluster(
 	ctx context.Context,
 	w *databricksSdk.WorkspaceClient,
 	c *databricksSdkCompute.ClusterDetails,
-) (string, error) {
-	// @see https://databrickslabs.github.io/overwatch/assets/_index/realtime_helpers.html
-
-	clusterId := c.ClusterId
-
-	log.Debugf("creating execution context for cluster %s", clusterId)
-	waitContextStatus, err := w.CommandExecution.Create(
-		ctx,
-		databricksSdkCompute.CreateContext{
-			ClusterId: clusterId,
-			Language: databricksSdkCompute.LanguagePython,
-		},
-	)
-	if err != nil {
-		return "", err
-	}
-
-	execContext, err := waitContextStatus.Get()
-	if err != nil {
-		return "", err
-	}
-
-	cmd := databricksSdkCompute.Command{
-		ClusterId: clusterId,
-		Command: `
-		print(f'{spark.conf.get("spark.databricks.clusterUsageTags.clusterOwnerOrgId")}')
-		print(f'{spark.conf.get("spark.ui.port")}')
-		`,
-		ContextId: execContext.Id,
-		Language: databricksSdkCompute.LanguagePython,
-	}
-
+	errChan chan error,
+	tags map[string]string,
+	writer chan <- model.Metric,
+) {
 	log.Debugf(
-		"executing context UI discovery script for cluster %s",
-		clusterId,
+		"processing cluster %s (%s) with source %s",
+		c.ClusterName,
+		c.ClusterId,
+		c.ClusterSource,
 	)
-	waitCommandStatus, err := w.CommandExecution.Execute(
+
+	sparkContextUiPath, err := getSparkContextUiPathForCluster(
 		ctx,
-		cmd,
+		w,
+		c,
 	)
 	if err != nil {
-		return "", err
+		errChan <- err
+		return
 	}
 
-	resp, err := waitCommandStatus.Get()
+	databricksSparkApiClient, err := NewDatabricksSparkApiClient(
+		sparkContextUiPath,
+		w,
+	)
 	if err != nil {
-		return "", err
+		errChan <- err
+		return
 	}
 
-	data, ok := resp.Results.Data.(string);
-	if !ok {
-		return "", fmt.Errorf("command result is not a string value")
-	}
-
-	vals := strings.Split(data, "\n")
-	if len(vals) != 2 {
-		return "", fmt.Errorf("invalid command result")
-	}
-
-	if vals[0] == "" || vals[1] == "" {
-		return "", fmt.Errorf("empty command results")
-	}
-
-	// @TODO: I think this URL pattern only works for multi-tenant accounts.
-	// We may need a flag for single tenant accounts and use the o/0 form
-	// shown on the overwatch site.
-
-	url := fmt.Sprintf(
-		"/driver-proxy-api/o/%s/%s/%s",
-		vals[0],
-		clusterId,
-		vals[1],
+	// Initialize spark pipelines
+	log.Debugf(
+		"polling metrics for cluster %s (%s) with spark context UI URL %s",
+		c.ClusterName,
+		c.ClusterId,
+		sparkContextUiPath,
 	)
 
-	return url, nil
+	newTags := maps.Clone(tags)
+	newTags["clusterProvider"] = "databricks"
+	newTags["databricksClusterId"] = c.ClusterId
+	newTags["databricksClusterName"] = c.ClusterName
+	newTags["databricksClusterSource"] = string(c.ClusterSource)
+
+	metricPrefix := ""
+	if viper.IsSet("databricks.sparkMetricPrefix") {
+		metricPrefix = viper.GetString("databricks.sparkMetricPrefix")
+	} else if viper.IsSet("databricks.spark.metricPrefix") {
+		metricPrefix = viper.GetString("databricks.spark.metricPrefix")
+	}
+
+	err = spark.PollMetrics(
+		ctx,
+		databricksSparkApiClient,
+		metricPrefix,
+		newTags,
+		writer,
+	)
+	if err != nil {
+		errChan <- err
+		return
+	}
+
+	errChan <- nil
 }

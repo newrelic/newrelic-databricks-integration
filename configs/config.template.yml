@@ -20,10 +20,13 @@ databricks:
   spark:
     enabled: true
     metricPrefix: spark.
+    pollClusterTimeout: 60
+    pollClusterTasks: 5
     clusterSources:
       ui: true
       job: true
       api: true
+      pipeline: true
   usage:
     enabled: true
     warehouseId: [YOUR_DATABRICKS_WAREHOUSE_ID]

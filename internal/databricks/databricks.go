@@ -37,6 +37,9 @@ func InitPipelines(
 		i.DryRun,
 	)
 
+	// Initialize caches
+	initCaches()
+
 	// Should we collect Spark metrics?
 	collectSparkMetrics := true
 	if viper.IsSet("databricks.sparkMetrics") {
@@ -51,7 +54,7 @@ func InitPipelines(
 		mp.AddExporter(newRelicExporter)
 
 		// Create the receiver
-		databricksSparkReceiver := NewDatabricksSparkReceiver(w, tags)
+		databricksSparkReceiver := NewDatabricksSparkReceiver(i, w, tags)
 		mp.AddReceiver(databricksSparkReceiver)
 
 		log.Debugf("initializing Databricks Spark pipeline")
@@ -65,9 +68,6 @@ func InitPipelines(
 	}
 
 	if collectUsageData {
-		// Initialize caches
-		initInfoByIdCaches(w)
-
 		// We need a sql warehouse ID to run the SQL queries
 		warehouseId := viper.GetString("databricks.usage.warehouseId")
 		if warehouseId == "" {

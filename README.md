@@ -85,6 +85,18 @@ Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.htm
 using the provided [init script](./init/cluster_init_integration.sh) to install
 and configure the integration at cluster startup time.
 
+**NOTE:** The recommended deployment method for collecting Spark telemetry is
+to deploy the Databricks Integration on the driver node of a Databricks
+[cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+using the provided the provided [init script](./init/cluster_init_integration.sh).
+When deployed using this method, no authentication is required to collect Spark
+telemetry from the cluster in which the Databricks Integration is deployed.
+However, even when deployed within the cluster, note that authentication will
+still be required to collect other types of telemetry such as [consumption and cost data](#consumption--cost-data)
+and [job run data](#job-run-data) as these types of telemetry are collected via
+the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
+which requires authentication.
+
 #### Deploy the integration on a host
 
 The Databricks Integration provides binaries for the following host platforms.
@@ -650,6 +662,36 @@ telemetry.
 
 **NOTE:** This configuration parameter replaces the older [`sparkClusterSources`](#sparkclustersources)
 configuration parameter.
+
+###### `pollClusterTimeout`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Timeout (in seconds) to use when polling Spark telemetry from clusters | number | N | [`interval`](#interval) |
+
+When polling Spark telemetry from [enabled](#databricks-cluster-source-configuration)
+clusters, the Databricks collector polls clusters concurrently to improve
+performance. This configuration parameter controls the amount of time the
+collector will wait for all clusters to be polled.
+
+**NOTE:** The default value for this configuration parameter is set to the value
+of the [interval](#interval) configuration parameter, and it is not recommended
+to change it. If you wish to tweak this value, do not exceed the value set for
+the [interval](#interval) configuration parameter. Be aware as well that
+reducing this value too much could cause complications during startup, as the
+initial poll can take a number of seconds to complete while calculating and
+caching the Spark context UI path.
+
+###### `pollClusterTasks`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Maximum number of clusters to poll concurrently | number | N | `5` |
+
+When polling Spark telemetry from [enabled](#databricks-cluster-source-configuration)
+clusters, the Databricks collector polls clusters concurrently to improve
+performance. This configuration parameter controls the maximum number of
+clusters to poll at once.
 
 ##### Databricks cluster source configuration
 

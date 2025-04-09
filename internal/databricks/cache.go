@@ -4,24 +4,27 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkCompute "github.com/databricks/databricks-sdk-go/service/compute"
-	databricksSql "github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 )
 
-type cacheLoaderFunc[T interface{}] func(ctx context.Context) (*T, error)
+type cacheEntry[T interface{}] struct {
+	expiration 	time.Time
+	value		*T
+}
 
 type memoryCache[T interface{}] struct {
 	mu				sync.Mutex
 	expiry			time.Duration
-	value			*T
-	expiration		time.Time
-	loader			cacheLoaderFunc[T]
+	values			map[string]*cacheEntry[T]
 }
+
+const WORKSPACE_INFO_CACHE_KEY = "workspace"
 
 type workspaceInfo struct {
 	id				int64
@@ -44,94 +47,76 @@ type warehouseInfo struct {
 
 var (
 	workspaceInfoCache			*memoryCache[*workspaceInfo]
-	clusterInfoCache			*memoryCache[map[string]*clusterInfo]
-	warehouseInfoCache			*memoryCache[map[string]*warehouseInfo]
+	clusterInfoCache			*memoryCache[*clusterInfo]
+	warehouseInfoCache			*memoryCache[*warehouseInfo]
+	sparkUrlCache				*memoryCache[string]
 )
 
-func newMemoryCache[T interface{}](
-	expiry time.Duration,
-	loader cacheLoaderFunc[T],
-) *memoryCache[T] {
+func newMemoryCache[T interface{}](expiry time.Duration) *memoryCache[T] {
 	return &memoryCache[T] {
 		expiry: expiry,
-		loader: loader,
+		values: make(map[string]*cacheEntry[T]),
 	}
 }
 
-func (m *memoryCache[T]) get(ctx context.Context) (*T, error) {
+func (m *memoryCache[T]) get(id string) *T {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.value == nil || time.Now().After(m.expiration) {
-		val, err := m.loader(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		m.value = val
-		m.expiration = time.Now().Add(m.expiry * time.Second)
+	entry, ok := m.values[id]
+	if !ok {
+		// cache miss
+		return nil
 	}
 
-	return m.value, nil
+	// cache hit
+	if !time.Now().After(entry.expiration) {
+		// entry not expired
+		return entry.value
+	}
+
+	// entry expired
+	delete(m.values, id)
+
+	return nil
 }
 
-/*
-func (m *memoryCache[T]) invalidate() {
+func (m *memoryCache[T]) set(id string, value *T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.expiration = time.Time{}
-	m.value = nil
+	entry, ok := m.values[id]
+	if !ok {
+		// cache miss
+		entry = &cacheEntry[T] { value: value }
+	} else {
+		entry.value = value
+	}
+
+	entry.expiration = time.Now().Add(m.expiry)
+
+	m.values[id] = entry
 }
-*/
 
 // @todo: allow cache expiry values to be configured
 
-func initInfoByIdCaches(
-	w *databricksSdk.WorkspaceClient,
-) {
-	workspaceInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (**workspaceInfo, error) {
-			workspaceInfo, err := buildWorkspaceInfo(ctx, w)
-			if err != nil {
-				return nil, err
-			}
-
-			return &workspaceInfo, nil
-		},
-	)
-
-	clusterInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (*map[string]*clusterInfo, error) {
-			m, err := buildClusterInfoByIdMap(ctx, w)
-			if err != nil {
-				return nil, err
-			}
-
-			return &m, nil
-		},
-	)
-
-	warehouseInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (*map[string]*warehouseInfo, error) {
-			m, err := buildWarehouseInfoByIdMap(ctx, w)
-			if err != nil {
-				return nil, err
-			}
-
-			return &m, nil
-		},
-	)
+func initCaches() {
+	workspaceInfoCache = newMemoryCache[*workspaceInfo](5 * time.Minute)
+	clusterInfoCache = newMemoryCache[*clusterInfo](5 * time.Minute)
+	warehouseInfoCache = newMemoryCache[*warehouseInfo](5 * time.Minute)
+	// It's unlikely Spark URLs change very often and they are expensive to
+	// calculate so this can have a high expiration
+	sparkUrlCache = newMemoryCache[string](30 * time.Minute)
 }
 
-func buildWorkspaceInfo(
+func getWorkspaceInfo(
 	ctx context.Context,
 	w *databricksSdk.WorkspaceClient,
 ) (*workspaceInfo, error) {
-	log.Debugf("building workspace info...")
+	info := workspaceInfoCache.get(WORKSPACE_INFO_CACHE_KEY)
+	if info != nil {
+		return *info, nil
+	}
 
 	workspaceId, err := w.CurrentWorkspaceID(ctx)
 	if err != nil {
@@ -157,129 +142,188 @@ func buildWorkspaceInfo(
 		hostname,
 	)
 
-	return &workspaceInfo{
+	workspaceInfo := &workspaceInfo{
 		workspaceId,
 		urlStr,
 		hostname,
-	}, nil
-}
-
-func getWorkspaceInfo(ctx context.Context) (*workspaceInfo, error) {
-	wi, err := workspaceInfoCache.get(ctx)
-	if err != nil {
-		return nil, err
 	}
 
-	return *wi, nil
-}
+	workspaceInfoCache.set(WORKSPACE_INFO_CACHE_KEY, &workspaceInfo)
 
-func buildClusterInfoByIdMap(
-	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
-) (map[string]*clusterInfo, error) {
-	log.Debugf("building cluster info by ID map...")
-
-	m := map[string]*clusterInfo{}
-
-	log.Debugf("listing clusters for workspace host %s", w.Config.Host)
-
-	all := w.Clusters.List(
-		ctx,
-		databricksSdkCompute.ListClustersRequest{ PageSize: 100 },
-	)
-
-	for ; all.HasNext(ctx);  {
-		c, err := all.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Debugf(
-			"cluster ID: %s ; cluster name: %s",
-			c.ClusterId,
-			c.ClusterName,
-		)
-
-		clusterInfo := &clusterInfo{}
-		clusterInfo.name = c.ClusterName
-		clusterInfo.source = string(c.ClusterSource)
-		clusterInfo.creator = c.CreatorUserName
-		clusterInfo.singleUserName = c.SingleUserName
-		clusterInfo.instancePoolId = c.InstancePoolId
-
-		m[c.ClusterId] = clusterInfo
-	}
-
-	return m, nil
+	return workspaceInfo, nil
 }
 
 func getClusterInfoById(
 	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
 	clusterId string,
 ) (*clusterInfo, error) {
-	clusterInfoMap, err := clusterInfoCache.get(ctx)
+	info := clusterInfoCache.get(clusterId)
+	if info != nil {
+		return *info, nil
+	}
+
+	c, err := w.Clusters.GetByClusterId(ctx, clusterId)
 	if err != nil {
 		return nil, err
 	}
 
-	clusterInfo, ok := (*clusterInfoMap)[clusterId]
-	if ok {
-		return clusterInfo, nil
-	}
-
-	return nil, nil
-}
-
-func buildWarehouseInfoByIdMap(
-	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
-) (map[string]*warehouseInfo, error) {
-	log.Debugf("building warehouse info by ID map...")
-
-	m := map[string]*warehouseInfo{}
-
-	log.Debugf("listing warehouses for workspace host %s", w.Config.Host)
-
-	all := w.Warehouses.List(
-		ctx,
-		databricksSql.ListWarehousesRequest{},
+	log.Debugf(
+		"cluster ID: %s ; cluster name: %s",
+		c.ClusterId,
+		c.ClusterName,
 	)
 
-	for ; all.HasNext(ctx); {
-		warehouse, err := all.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Debugf(
-			"warehouse ID: %s ; warehouse name: %s",
-			warehouse.Id,
-			warehouse.Name,
-		)
-
-		warehouseInfo := &warehouseInfo{}
-		warehouseInfo.name = warehouse.Name
-		warehouseInfo.creator = warehouse.CreatorName
-
-		m[warehouse.Id] = warehouseInfo
+	clusterInfo := &clusterInfo{
+		name: c.ClusterName,
+		source: string(c.ClusterSource),
+		creator: c.CreatorUserName,
+		singleUserName: c.SingleUserName,
+		instancePoolId: c.InstancePoolId,
 	}
 
-	return m, nil
+	clusterInfoCache.set(clusterId, &clusterInfo)
+
+	return clusterInfo, nil
 }
 
 func getWarehouseInfoById(
 	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
 	warehouseId string,
 ) (*warehouseInfo, error) {
-	warehouseInfoMap, err := warehouseInfoCache.get(ctx)
+	info := warehouseInfoCache.get(warehouseId)
+	if info != nil {
+		return *info, nil
+	}
+
+	warehouse, err := w.Warehouses.GetById(ctx, warehouseId)
 	if err != nil {
 		return nil, err
 	}
 
-	warehouseInfo, ok := (*warehouseInfoMap)[warehouseId]
-	if ok {
-		return warehouseInfo, nil
+	log.Debugf(
+		"warehouse ID: %s ; warehouse name: %s",
+		warehouse.Id,
+		warehouse.Name,
+	)
+
+	warehouseInfo := &warehouseInfo{
+		name: warehouse.Name,
+		creator: warehouse.CreatorName,
 	}
 
-	return nil, nil
+	warehouseInfoCache.set(warehouseId, &warehouseInfo)
+
+	return warehouseInfo, nil
+}
+
+func getSparkContextUiPathForCluster(
+	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
+	c *databricksSdkCompute.ClusterDetails,
+) (string, error) {
+	// @see https://databrickslabs.github.io/overwatch/assets/_index/realtime_helpers.html
+
+	sparkContextUiPath := sparkUrlCache.get(c.ClusterId)
+	if sparkContextUiPath != nil {
+		return *sparkContextUiPath, nil
+	}
+
+	/// resolve the spark context UI URL for the cluster
+	log.Debugf(
+		"resolving Spark context UI URL for cluster %s (%s) with source %s",
+		c.ClusterName,
+		c.ClusterId,
+		c.ClusterSource,
+	)
+
+	clusterId := c.ClusterId
+
+	log.Debugf(
+		"creating execution context for cluster %s (%s)",
+		c.ClusterName,
+		clusterId,
+	)
+
+	waitContextStatus, err := w.CommandExecution.Create(
+		ctx,
+		databricksSdkCompute.CreateContext{
+			ClusterId: clusterId,
+			Language: databricksSdkCompute.LanguagePython,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	execContext, err := waitContextStatus.Get()
+	if err != nil {
+		return "", err
+	}
+
+	cmd := databricksSdkCompute.Command{
+		ClusterId: clusterId,
+		Command: `
+		print(f'{spark.conf.get("spark.databricks.clusterUsageTags.clusterOwnerOrgId")}')
+		print(f'{spark.conf.get("spark.ui.port")}')
+		`,
+		ContextId: execContext.Id,
+		Language: databricksSdkCompute.LanguagePython,
+	}
+
+	log.Debugf(
+		"executing context UI discovery script for cluster %s (%s)",
+		c.ClusterName,
+		clusterId,
+	)
+
+	waitCommandStatus, err := w.CommandExecution.Execute(
+		ctx,
+		cmd,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := waitCommandStatus.Get()
+	if err != nil {
+		return "", err
+	}
+
+	data, ok := resp.Results.Data.(string);
+	if !ok {
+		return "", fmt.Errorf("command result is not a string value")
+	}
+
+	vals := strings.Split(data, "\n")
+	if len(vals) != 2 {
+		return "", fmt.Errorf("invalid command result")
+	}
+
+	if vals[0] == "" || vals[1] == "" {
+		return "", fmt.Errorf("empty command results")
+	}
+
+	// @TODO: I think this URL pattern only works for multi-tenant accounts.
+	// We may need a flag for single tenant accounts and use the o/0 form
+	// shown on the overwatch site.
+
+	url := fmt.Sprintf(
+		"/driver-proxy-api/o/%s/%s/%s",
+		vals[0],
+		clusterId,
+		vals[1],
+	)
+
+	log.Debugf(
+		"final spark context ui path for cluster %s (%s): %s",
+		c.ClusterName,
+		clusterId,
+		url,
+	)
+
+	sparkUrlCache.set(c.ClusterId, &url)
+
+	return url, nil
 }

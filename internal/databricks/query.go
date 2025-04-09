@@ -149,7 +149,7 @@ func runQuery(
 	var workspaceInfo *workspaceInfo
 
 	if query.includeWorkspaceInfo {
-		workspaceInfo, err = getWorkspaceInfo(ctx)
+		workspaceInfo, err = getWorkspaceInfo(ctx, w)
 		if err != nil {
 			return err
 		}
@@ -250,6 +250,7 @@ func runQuery(
 			case CLUSTER_ID_ATTRIBUTE_TYPE:
 				ok = columnToClusterInfo(
 					ctx,
+					w,
 					attrs,
 					attrName,
 					col,
@@ -261,6 +262,7 @@ func runQuery(
 			case WAREHOUSE_ID_ATTRIBUTE_TYPE:
 				ok = columnToWarehouseInfo(
 					ctx,
+					w,
 					attrs,
 					attrName,
 					col,
@@ -415,6 +417,7 @@ func columnToTags(
 
 func columnToClusterInfo(
 	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
 	attrs map[string]interface{},
 	attrName string,
 	col string,
@@ -430,6 +433,7 @@ func columnToClusterInfo(
 
 	clusterInfo, err := getClusterInfoById(
 		ctx,
+		w,
 		col,
 	)
 	if err != nil {
@@ -469,6 +473,7 @@ func columnToClusterInfo(
 
 func columnToWarehouseInfo(
 	ctx context.Context,
+	w *databricksSdk.WorkspaceClient,
 	attrs map[string]interface{},
 	attrName string,
 	col string,
@@ -484,6 +489,7 @@ func columnToWarehouseInfo(
 
 	warehouseInfo, err := getWarehouseInfoById(
 		ctx,
+		w,
 		col,
 	)
 	if err != nil {
