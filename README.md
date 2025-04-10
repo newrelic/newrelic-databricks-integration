@@ -22,6 +22,13 @@ Databricks) and/or Spark telemetry from any Spark deployment. See the
 
 ![Apache Spark Dashboard Screenshot](./examples/spark-dashboard-jobs.png)
 
+## **_V2 EOL Notice_**
+
+The v2.x.x version of the Databricks Integration will end-of-life on June 30th,
+2025. As of April 10th, 2025, only security vulnerabilities will be applied to
+the [`release/v2`](https://github.com/newrelic/newrelic-databricks-integration/tree/release/v2)
+branch. No new features or bug fixes will be applied to this branch.
+
 ## Table of Contents
 
 * [Important Notes](#important-notes)
