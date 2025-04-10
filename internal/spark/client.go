@@ -8,42 +8,22 @@ import (
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 )
 
-type SparkApiClient interface {
-	GetApplications(ctx context.Context) ([]SparkApplication, error)
-	GetApplicationExecutors(
-		ctx context.Context,
-		app *SparkApplication,
-	) ([]SparkExecutor, error)
-	GetApplicationJobs(
-		ctx context.Context,
-		app *SparkApplication,
-	) ([]SparkJob, error)
-	GetApplicationStages(
-		ctx context.Context,
-		app *SparkApplication,
-	) ([]SparkStage, error)
-	GetApplicationRDDs(
-		ctx context.Context,
-		app *SparkApplication,
-	) ([]SparkRDD, error)
-}
-
-type NativeSparkApiClient struct {
+type SparkApiClient struct {
 	sparkContextUiUrl		string
 	authenticator			connectors.HttpAuthenticator
 }
 
-func NewNativeSparkApiClient(
+func NewSparkApiClient(
 	sparkContextUiUrl string,
 	authenticator connectors.HttpAuthenticator,
-) *NativeSparkApiClient {
-	return &NativeSparkApiClient{
+) *SparkApiClient {
+	return &SparkApiClient{
 		sparkContextUiUrl,
 		authenticator,
 	}
 }
 
-func (s *NativeSparkApiClient) GetApplications(
+func (s *SparkApiClient) GetApplications(
 	ctx context.Context,
 ) ([]SparkApplication, error) {
 	sparkApps := []SparkApplication{}
@@ -60,7 +40,7 @@ func (s *NativeSparkApiClient) GetApplications(
 	return sparkApps, nil
 }
 
-func (s *NativeSparkApiClient) GetApplicationExecutors(
+func (s *SparkApiClient) GetApplicationExecutors(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkExecutor, error) {
@@ -78,7 +58,7 @@ func (s *NativeSparkApiClient) GetApplicationExecutors(
 	return executors, nil
 }
 
-func (s *NativeSparkApiClient) GetApplicationJobs(
+func (s *SparkApiClient) GetApplicationJobs(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkJob, error) {
@@ -96,7 +76,7 @@ func (s *NativeSparkApiClient) GetApplicationJobs(
 	return jobs, nil
 }
 
-func (s *NativeSparkApiClient) GetApplicationStages(
+func (s *SparkApiClient) GetApplicationStages(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkStage, error) {
@@ -114,7 +94,7 @@ func (s *NativeSparkApiClient) GetApplicationStages(
 	return stages, nil
 }
 
-func (s *NativeSparkApiClient) GetApplicationRDDs(
+func (s *SparkApiClient) GetApplicationRDDs(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkRDD, error) {
@@ -146,6 +126,7 @@ func makeRequest(
 	connector.SetHeaders(map[string]string {
 		"Content-Type": "application/json",
 		"Accept": "application/json",
+		"User-Agent": connectors.GetUserAgent(),
 	})
 
 	in, err := connector.Request()

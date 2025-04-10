@@ -17,13 +17,6 @@ databricks:
   oauthClientId: [YOUR_DATABRICKS_SERVICE_PRINCIPAL_OAUTH_CLIENT_ID]
   oauthClientSecret: [YOUR_DATABRICKS_SERVICE_PRINCIPAL_OAUTH_CLIENT_SECRET]
   sqlStatementTimeout: 30
-  spark:
-    enabled: true
-    metricPrefix: spark.
-    clusterSources:
-      ui: true
-      job: true
-      api: true
   usage:
     enabled: true
     warehouseId: [YOUR_DATABRICKS_WAREHOUSE_ID]
