@@ -33,8 +33,6 @@ databricks:
   accessToken: "$NEW_RELIC_DATABRICKS_ACCESS_TOKEN"
   oauthClientId: "$NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID"
   oauthClientSecret: "$NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET"
-  spark:
-    enabled: false
   usage:
     enabled: $NEW_RELIC_DATABRICKS_USAGE_ENABLED
     warehouseId: "$NEW_RELIC_DATABRICKS_SQL_WAREHOUSE"

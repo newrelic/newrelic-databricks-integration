@@ -16,14 +16,14 @@ import (
 
 type SparkMetricsReceiver struct {
 	i 					*integration.LabsIntegration
-	client 				SparkApiClient
+	client 				*SparkApiClient
 	metricPrefix		string
 	tags				map[string]string
 }
 
 func NewSparkMetricsReceiver(
 	i *integration.LabsIntegration,
-	client SparkApiClient,
+	client *SparkApiClient,
 	metricPrefix string,
 	tags map[string]string,
 ) pipeline.MetricsReceiver {
@@ -45,23 +45,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 	ctx context.Context,
 	writer chan <- model.Metric,
 ) error {
-	return PollMetrics(
-		ctx,
-		s.client,
-		s.metricPrefix,
-		s.tags,
-		writer,
-	)
-}
-
-func PollMetrics(
-	ctx context.Context,
-	client SparkApiClient,
-	metricPrefix string,
-	tags map[string]string,
-	writer chan <- model.Metric,
-) error {
-	sparkApps, err := client.GetApplications(ctx)
+	sparkApps, err := s.client.GetApplications(ctx)
 	if err != nil {
 		return err
 	}
@@ -76,10 +60,10 @@ func PollMetrics(
 
 			err := collectSparkAppExecutorMetrics(
 				ctx,
-				client,
+				s.client,
 				app,
-				metricPrefix,
-				tags,
+				s.metricPrefix,
+				s.tags,
 				writer,
 			)
 			if err != nil {
@@ -88,10 +72,10 @@ func PollMetrics(
 
 			err = collectSparkAppJobMetrics(
 				ctx,
-				client,
+				s.client,
 				app,
-				metricPrefix,
-				tags,
+				s.metricPrefix,
+				s.tags,
 				writer,
 			)
 			if err != nil {
@@ -100,10 +84,10 @@ func PollMetrics(
 
 			err = collectSparkAppStageMetrics(
 				ctx,
-				client,
+				s.client,
 				app,
-				metricPrefix,
-				tags,
+				s.metricPrefix,
+				s.tags,
 				writer,
 			)
 			if err != nil {
@@ -112,10 +96,10 @@ func PollMetrics(
 
 			err = collectSparkAppRDDMetrics(
 				ctx,
-				client,
+				s.client,
 				app,
-				metricPrefix,
-				tags,
+				s.metricPrefix,
+				s.tags,
 				writer,
 			)
 			if err != nil {
@@ -131,7 +115,7 @@ func PollMetrics(
 
 func collectSparkAppExecutorMetrics(
 	ctx context.Context,
-	client SparkApiClient,
+	client *SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
 	tags map[string]string,
@@ -292,7 +276,7 @@ func collectSparkAppExecutorMetrics(
 
 func collectSparkAppJobMetrics(
 	ctx context.Context,
-	client SparkApiClient,
+	client *SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
 	tags map[string]string,
@@ -510,7 +494,7 @@ func collectSparkAppJobMetrics(
 
 func collectSparkAppStageMetrics(
 	ctx context.Context,
-	client SparkApiClient,
+	client *SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
 	tags map[string]string,
@@ -1303,7 +1287,7 @@ func writeStageTaskMetrics(
 
 func collectSparkAppRDDMetrics(
 	ctx context.Context,
-	client SparkApiClient,
+	client *SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
 	tags map[string]string,

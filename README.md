@@ -55,13 +55,8 @@ Databricks) and/or Spark telemetry from any Spark deployment. See the
 * All references within this document to Databricks documentation reference the
   [Databricks on AWS documentation](https://docs.databricks.com/en/index.html).
   Use the cloud switcher menu located in the upper right hand corner of the
-  documentation to select corresponding documentation for a different cloud.
-* [On-host deployment](#on-host) is currently the only supported deployment
-  type. For Databricks and non-Databricks Spark deployments, the integration can
-  be deployed on [any supported host platform](#deploy-the-integration-on-a-host).
-  For Databricks, support is also provided to deploy the integration
-  on the [driver node of a Databricks cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster)
-  using a [cluster-scoped init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html).
+  documentation to select corresponding documentation for a different cloud
+  provider.
 
 ## Getting Started
 
@@ -73,51 +68,31 @@ the sample dashboards included in the [examples](./examples/) directory.
 
 ### On-host
 
-The Databricks Integration can be run on any supported host platform. The
-integration will collect Databricks telemetry (including Spark on Databricks)
-via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
-using the [Databricks SDK for Go](https://docs.databricks.com/en/dev-tools/sdk-go.html)
-and/or Spark telemetry from a non-Databricks Spark deployment via the
-[Spark ReST API](https://spark.apache.org/docs/3.5.2/monitoring.html#rest-api).
+The Databricks Integration can be deployed inside a Databricks cluster on the
+cluster's driver node (recommended) or outside a Databricks cluster on a
+supported host platform.
 
-The Databricks Integration can also be deployed on the driver node of a
-Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
-using the provided [init script](./init/cluster_init_integration.sh) to install
-and configure the integration at cluster startup time.
+**NOTE:**
 
-#### Deploy the integration on a host
-
-The Databricks Integration provides binaries for the following host platforms.
-
-* Linux amd64
-* Windows amd64
-
-To run the Databricks integration on a host, perform the following steps.
-
-1. Download the appropriate archive for your platform from the [latest release](https://github.com/newrelic/newrelic-databricks-integration/releases).
-1. Extract the archive to a new or existing directory.
-1. Create a directory named `configs` in the same directory.
-1. Create a file named `config.yml` in the `configs` directory and copy the
-   contents of the file [`configs/config.template.yml`](./configs/config.template.yml)
-   in this repository into it.
-1. Edit the `config.yml` file to [configure](#configuration) the integration
-   appropriately for your environment.
-1. From the directory where the archive was extracted, execute the integration
-   binary using the command `./newrelic-databricks-integration` (or
-   `.\newrelic-databricks-integration.exe` on Windows) with the appropriate
-   [Command Line Options](#command-line-options).
+* [Apache Spark data](#apache-spark-data) for a Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+  cannot be collected remotely. In order to collect [Apache Spark data](#apache-spark-data)
+  from a Databricks cluster, the Databricks Integration _must_ be deployed
+  inside the cluster.
+* The Databricks Integration can be used separately from Databricks to solely
+  collect [Apache Spark data](#apache-spark-data) from any accessible Spark
+  deployment.
 
 #### Deploy the integration on the driver node of a Databricks cluster
 
 The Databricks Integration can be deployed on the driver node of a Databricks
-[cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+all-purpose, job, or pipeline [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
 using a [cluster-scoped init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html).
 The [init script](./init/cluster_init_integration.sh) uses custom
 [environment variables](https://docs.databricks.com/en/compute/configure.html#env-var)
 to specify configuration parameters necessary for the integration [configuration](#configuration).
 
-To install the [init script](./init/cluster_init_integration.sh), perform the
-following steps.
+To install the [init script](./init/cluster_init_integration.sh) on an
+all-purpose cluster, perform the following steps.
 
 1. Login to your Databricks account and navigate to the desired
    [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
@@ -173,19 +148,50 @@ token _or_ OAuth credentials need to be specified but not both. If both are
 specified, the OAuth credentials take precedence. Finally, make sure to restart
 the cluster following the configuration of the environment variables.
 
+**NOTE:**
+* To install the [init script](./init/cluster_init_integration.sh) on a job
+  cluster, see the section [configure compute for jobs](https://docs.databricks.com/aws/en/jobs/compute)
+  in the Databricks documentation.
+* To install the [init script](./init/cluster_init_integration.sh) on a pipeline
+  cluster, see the section [configure compute for a DLT pipeline](https://docs.databricks.com/aws/en/dlt/configure-compute)
+  in the Databricks documentation.
+
+#### Deploy the integration on a host outside a Databricks cluster
+
+The Databricks Integration provides binaries for the following host platforms.
+
+* Linux amd64
+* Windows amd64
+
+To run the Databricks integration on a host outside a Databricks cluster,
+perform the following steps.
+
+1. Download the appropriate archive for your platform from the [latest release](https://github.com/newrelic/newrelic-databricks-integration/releases/latest).
+1. Extract the archive to a new or existing directory.
+1. Create a directory named `configs` in the same directory.
+1. Create a file named `config.yml` in the `configs` directory and copy the
+   contents of the file [`configs/config.template.yml`](./configs/config.template.yml)
+   in this repository into it.
+1. Edit the `config.yml` file to [configure](#configuration) the integration
+   appropriately for your environment.
+1. From the directory where the archive was extracted, execute the integration
+   binary using the command `./newrelic-databricks-integration` (or
+   `.\newrelic-databricks-integration.exe` on Windows) with the appropriate
+   [Command Line Options](#command-line-options).
+
 ## Features
 
 The Databricks Integration supports the following capabilities.
 
 * Collect Spark telemetry
 
-  The Databricks Integration can collect telemetry from Spark running
-  on Databricks. By default, the integration will automatically connect to
-  and collect telemetry from the Spark deployments in all clusters created via
-  the UI or API in the specified workspace.
+  When deployed [inside a Databricks cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster),
+  the Databricks Integration can collect telemetry from all Spark applications
+  running in the cluster.
 
-  The Databricks Integration can also collect Spark telemetry from any
-  non-Databricks Spark deployment.
+  When deployed [outside a Databricks cluster](#deploy-the-integration-on-a-host-outside-a-databricks-cluster),
+  the Databricks Integration can also collect Spark telemetry from all Spark
+  applications on any accessible Spark deployment.
 
 * Collect Databricks consumption and cost data
 
@@ -451,12 +457,6 @@ used by the integration when constructing the URLs for API calls. Note that the
 value of this parameter _must not_ include the `https://` prefix, e.g.
 `https://my-databricks-instance-name.cloud.databricks.com`.
 
-This parameter is required when the collection of Spark telemetry for Spark
-running on Databricks is [enabled](#databricks-spark-enabled). Note that this
-does not apply when the integration is [deployed directly on the driver node](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster)
-via the provided [init script](./init/cluster_init_integration.sh). This
-parameter is unused in that scenario.
-
 The workspace host can also be specified using the `DATABRICKS_HOST`
 environment variable.
 
@@ -509,36 +509,6 @@ mechanism (e.g. the `client_secret` field in a Databricks
 
 See the [authentication section](#authentication) for more details.
 
-###### `sparkMetrics`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable automatic collection of Spark metrics | `true` / `false` | N | `true` |
-
-**Deprecated** This configuration parameter has been deprecated in favor of the
-configuration parameter [`databricks.spark.enabled`](#databricks-spark-enabled).
-Use that parameter instead.
-
-###### `sparkMetricPrefix`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| A prefix to prepend to Spark metric names | string | N | N/a |
-
-**Deprecated** This configuration parameter has been deprecated in favor of the
-configuration parameter [`databricks.spark.metricPrefix`](#databricks-spark-metricprefix).
-Use that parameter instead.
-
-###### `sparkClusterSources`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| The root node for the [Databricks cluster source configuration](#databricks-cluster-source-configuration) | YAML Mapping | N | N/a |
-
-**Deprecated** This configuration parameter has been deprecated in favor of the
-configuration parameter [`databricks.spark.clusterSources`](#databricks-spark-clustersources).
-Use that parameter instead.
-
 ###### `sqlStatementTimeout`
 
 | Description | Valid Values | Required | Default |
@@ -549,18 +519,6 @@ Certain telemetry and data collected by the Databricks collector requires the
 collector to run Databricks SQL statements on a SQL warehouse. This
 configuration parameter specifies the number of seconds to wait before timing
 out a pending or running SQL query.
-
-###### `spark`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| The root node for the set of [Databricks Spark configuration](#databricks-spark-configuration) parameters | YAML Mapping | N | N/a |
-
-This element groups together the configuration parameters to [configure](#databricks-spark-configuration)
-the Databricks collector settings related to the collection of telemetry from
-Databricks running on Spark. The configuration parameters in this group replace
-the configuration parameters [`sparkMetrics`](#sparkmetrics),
-[`sparkMetricPrefix`](#sparkmetricprefix), and [`sparkClusterSources`](#sparkclustersources).
 
 ###### `usage`
 
@@ -590,105 +548,6 @@ the Databricks collector settings related to the collection of job data.
 This element groups together the configuration parameters to [configure](#databricks-pipeline-configuration)
 the Databricks collector settings related to the collection of [Databricks Delta Live Tables Pipelines](https://docs.databricks.com/en/delta-live-tables/develop-pipelines.html)
 telemetry.
-
-##### Databricks `spark` configuration
-
-###### Databricks Spark `enabled`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable automatic collection of Spark metrics | `true` / `false` | N | `true` |
-
-By default, when the Databricks collector is enabled, it will automatically
-collect Spark telemetry from Spark running on Databricks.
-
-This flag can be used to disable the collection of Spark telemetry by the
-Databricks collector. This may be useful to control data ingest when business
-requirements call for the collection of non-Spark related Databricks telemetry
-and Spark telemetry is not used. This flag is also used by the integration when
-it is [deployed directly on the driver node of a Databricks cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster) using the
-the provided [init script](./init/cluster_init_integration.sh) since Spark
-telemetry is collected by the Spark collector in this scenario.
-
-**NOTE:** This configuration parameter replaces the older [`sparkMetrics`](#sparkmetrics)
-configuration parameter.
-
-###### Databricks Spark `metricPrefix`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| A prefix to prepend to Spark metric names | string | N | N/a |
-
-This parameter serves the same purpose as the [`metricPrefix`](#metricprefix)
-parameter of the [Spark configuration](#spark-configuration) except that it
-applies to Spark telemetry collected by the Databricks collector. See the
-[`metricPrefix`](#metricprefix) parameter of the [Spark configuration](#spark-configuration)
-for more details.
-
-Note that this parameter has no effect on Spark telemetry collected by the Spark
-collector. This includes the case when the integration is
-[deployed directly on the driver node of a Databricks cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster)
-using the the provided [init script](./init/cluster_init_integration.sh)
-since Spark telemetry is collected by the Spark collector in this scenario.
-
-**NOTE:** This configuration parameter replaces the older [`sparkMetricPrefix`](#sparkmetricprefix)
-configuration parameter.
-
-###### Databricks Spark `clusterSources`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| The root node for the [Databricks cluster source configuration](#databricks-cluster-source-configuration) | YAML Mapping | N | N/a |
-
-The mechanism used to create a cluster is referred to as a cluster "source". The
-Databricks collector supports collecting Spark telemetry from all-purpose
-clusters created via the UI or API and from job clusters created via the
-Databricks Jobs Scheduler. This element groups together the flags used to
-individually [enable or disable](#databricks-cluster-source-configuration) the
-cluster sources from which the Databricks collector will collect Spark
-telemetry.
-
-**NOTE:** This configuration parameter replaces the older [`sparkClusterSources`](#sparkclustersources)
-configuration parameter.
-
-##### Databricks cluster source configuration
-
-###### `ui`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable automatic collection of Spark telemetry from all-purpose clusters created via the UI | `true` / `false` | N | `true` |
-
-By default, when the Databricks collector is enabled, it will automatically
-collect Spark telemetry from all all-purpose clusters created via the UI.
-
-This flag can be used to disable the collection of Spark telemetry from
-all-purpose clusters created via the UI.
-
-###### `job`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable automatic collection of Spark telemetry from job clusters created via the Databricks Jobs Scheduler | `true` / `false` | N | `true` |
-
-By default, when the Databricks collector is enabled, it will automatically
-collect Spark telemetry from job clusters created by the Databricks Jobs
-Scheduler.
-
-This flag can be used to disable the collection of Spark telemetry from job
-clusters created via the Databricks Jobs Scheduler.
-
-###### `api`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable automatic collection of Spark telemetry from all-purpose clusters created via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction) | `true` / `false` | N | `true` |
-
-By default, when the Databricks collector is enabled, it will automatically
-collect Spark telemetry from all-purpose clusters created via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction).
-
-This flag can be used to disable the collection of Spark telemetry from
-all-purpose clusters created via the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction).
 
 ##### Databricks Usage Configuration
 
@@ -1027,7 +886,7 @@ more details.
 This parameter specifies an offset, in seconds, that the collector will use to
 delay collection of pipeline events in order to account for potential lag in the
 [list pipeline events endpoint](https://docs.databricks.com/api/workspace/pipelines/listpipelineevents)
-of the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
+of the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction).
 
 See the section [`intervalOffset` Configuration](#pipeline-intervaloffset-configuration)
 for more details.
@@ -1042,16 +901,16 @@ The Spark configuration parameters are used to configure the Spark collector.
 | --- | --- | --- | --- |
 | The [Web UI](https://spark.apache.org/docs/3.5.2/web-ui.html) URL of an application on the Spark deployment to monitor | string | N | N/a |
 
-This parameter can be used to monitor a non-Databricks Spark deployment. It
-specifes the URL of the [Web UI](https://spark.apache.org/docs/3.5.2/web-ui.html)
-of an application running on the Spark deployment to monitor. The value should
-be of the form `http[s]://<hostname>:<port>` where `<hostname>` is the hostname
-of the Spark deployment to monitor and `<port>` is the port number of the
-Spark application's Web UI (typically 4040 or 4041, 4042, etc if more than one
+This parameter can be used to monitor a Spark deployment. It specifies the URL
+of the [Web UI](https://spark.apache.org/docs/3.5.2/web-ui.html) of an
+application running on the Spark deployment to monitor. The value should be of
+the form `http[s]://<hostname>:<port>` where `<hostname>` is the hostname of the
+Spark deployment to monitor and `<port>` is the port number of the Spark
+application's Web UI (typically 4040 or 4041, 4042, etc if more than one
 application is running on the same host).
 
 Note that the value must not contain a path. The path of the [Spark ReST API](https://spark.apache.org/docs/3.5.2/monitoring.html#rest-api)
-endpoints (mounted at `/api/v1`) will automatically be prepended.
+endpoints (mounted at `/api/v1`) will automatically be appended.
 
 ###### `metricPrefix`
 
@@ -1074,10 +933,10 @@ use the [`sparkMetricPrefix`](#sparkmetricprefix) instead.
 ### Authentication
 
 The Databricks integration uses the [Databricks SDK for Go](https://docs.databricks.com/en/dev-tools/sdk-go.html)
-to access the Databricks and Spark ReST APIs. The SDK performs authentication on
-behalf of the integration and provides many options for configuring the
-authentication type and credentials to be used. See the
-[SDK documentation](https://github.com/databricks/databricks-sdk-go?tab=readme-ov-file#authentication)
+to access the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction).
+The SDK performs authentication on behalf of the integration and provides many
+options for configuring the authentication type and credentials to be used. See
+the [SDK documentation](https://github.com/databricks/databricks-sdk-go?tab=readme-ov-file#authentication)
 and the [Databricks client unified authentication documentation](https://docs.databricks.com/en/dev-tools/auth/unified-auth.html)
 for details.
 
@@ -1105,6 +964,11 @@ For convenience purposes, the following parameters can be used in the
   in a Databricks [configuration profile](https://docs.databricks.com/en/dev-tools/auth/config-profiles.html)
   or the `DATABRICKS_CLIENT_SECRET` environment variable).
 
+**NOTE:** Authentication applies only to calls made to collect Databricks
+telemetry via the [Databricks SDK for Go](https://docs.databricks.com/en/dev-tools/sdk-go.html).
+The Spark collector does not support authentication when accessing the
+[Spark ReST API](https://spark.apache.org/docs/3.5.2/monitoring.html#rest-api).
+
 ### Apache Spark Data
 
 The Databricks Integration can collect [Apache Spark](https://spark.apache.org/docs/latest/index.html)
@@ -1115,28 +979,12 @@ through the [Web UI](https://spark.apache.org/docs/latest/web-ui.html) of a
 given [`SparkContext`](https://spark.apache.org/docs/3.5.4/rdd-programming-guide.html#initializing-spark).
 
 This feature can be used for _any_ [Spark cluster](https://spark.apache.org/docs/3.5.4/cluster-overview.html),
-not just for Spark running on Databricks. The following logic is used to
-determine when application metrics are collected and from what sources.
+not just for Spark running on Databricks.
 
-* When the Databricks collector is enabled (the top-level [`databricks`](#databricks)
-  node is specified) and the [Databricks Spark `enabled`](#databricks-spark-enabled)
-  flag is not specified or is set to `true`, Spark application metrics are
-  collected from the following sources.
-
-  * All _running_ all-purpose [clusters](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
-    created through the UI, unless the [`ui`](#ui) [cluster source](#databricks-spark-clustersources)
-    flag is set to `false`
-  * All _running_ all-purpose [clusters](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
-    created through an API request, unless the [`api`](#api) [cluster source](#databricks-spark-clustersources)
-    flag is set to `false`
-  * All _running_ job [clusters](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
-    created by the Databricks Job Scheduler, unless the [`job`](#job)
-    [cluster source](#databricks-spark-clustersources) flag is set to `false`
-
-* When the Spark collector is enabled (the top-level [`spark`](#spark) node is
-  specified), Spark application metrics are collected from the [Web UI](https://spark.apache.org/docs/latest/web-ui.html)
-  URL specified in the [`webUiUrl`](#webuiurl) or from the [Web UI](https://spark.apache.org/docs/latest/web-ui.html)
-  URL `https://localhost:4040` by default.
+When the Spark collector is enabled (the top-level [`spark`](#spark) node is
+specified), Spark application metrics are collected from the [Web UI](https://spark.apache.org/docs/latest/web-ui.html)
+URL specified in the [`webUiUrl`](#webuiurl) or from the [Web UI](https://spark.apache.org/docs/latest/web-ui.html)
+URL `https://localhost:4040` by default.
 
 #### Spark Application Metric Data
 
@@ -1385,8 +1233,8 @@ given task and status using the `sparkAppTaskId`, `sparkAppTaskAttempt`, and
 `sparkAppTaskStatus` [attributes](#spark-application-stage-task-attributes) and
 scoped to the executor of the task using the `sparkAppTaskExecutorId` attribute.
 
-**NOTE:** Some of the shuffl read metric descriptions below are sourced from the
-file [ShuffleReadMetrics.scala](https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/executor/ShuffleReadMetrics.scala).
+**NOTE:** Some of the shuffle read metric descriptions below are sourced from
+the file [ShuffleReadMetrics.scala](https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/executor/ShuffleReadMetrics.scala).
 
 | Metric Name | Metric Type | Description |
 | --- | --- | --- |

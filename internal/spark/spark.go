@@ -292,7 +292,7 @@ func InitPipelines(
 
 	// @TODO: support authentication?
 
-	sparkApiClient := NewNativeSparkApiClient(
+	sparkApiClient := NewSparkApiClient(
 		webUiUrl,
 		nil,
 	)
@@ -315,37 +315,17 @@ func InitPipelines(
 	mp := pipeline.NewMetricsPipeline("spark-metrics-pipeline")
 	mp.AddExporter(newRelicExporter)
 
-	err := setupReceivers(
+	// Create the Spark receiver
+	sparkReceiver := NewSparkMetricsReceiver(
 		i,
-		mp,
 		sparkApiClient,
 		viper.GetString("spark.metricPrefix"),
 		tags,
 	)
-	if err != nil {
-		return err
-	}
-
-	i.AddComponent(mp)
-
-	return nil
-}
-
-func setupReceivers(
-	i *integration.LabsIntegration,
-	mp *pipeline.MetricsPipeline,
-	client SparkApiClient,
-	metricPrefix string,
-	tags map[string]string,
-) error {
-	sparkReceiver := NewSparkMetricsReceiver(
-		i,
-		client,
-		metricPrefix,
-		tags,
-	)
 
 	mp.AddReceiver(sparkReceiver)
+
+	i.AddComponent(mp)
 
 	return nil
 }

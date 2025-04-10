@@ -37,28 +37,6 @@ func InitPipelines(
 		i.DryRun,
 	)
 
-	// Should we collect Spark metrics?
-	collectSparkMetrics := true
-	if viper.IsSet("databricks.sparkMetrics") {
-		collectSparkMetrics = viper.GetBool("databricks.sparkMetrics")
-	} else if viper.IsSet("databricks.spark.enabled") {
-		collectSparkMetrics = viper.GetBool("databricks.spark.enabled")
-	}
-
-	if collectSparkMetrics {
-		// Create a metrics pipeline
-		mp := pipeline.NewMetricsPipeline("databricks-spark-pipeline")
-		mp.AddExporter(newRelicExporter)
-
-		// Create the receiver
-		databricksSparkReceiver := NewDatabricksSparkReceiver(w, tags)
-		mp.AddReceiver(databricksSparkReceiver)
-
-		log.Debugf("initializing Databricks Spark pipeline")
-
-		i.AddComponent(mp)
-	}
-
 	collectUsageData := true
 	if viper.IsSet("databricks.usage.enabled") {
 		collectUsageData = viper.GetBool("databricks.usage.enabled")
