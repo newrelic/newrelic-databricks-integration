@@ -105,11 +105,87 @@ func (s *SparkApiClient) GetApplicationRDDs(
 		s.authenticator,
 		&rdds,
 	)
-	if err !=  nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return rdds, nil
+}
+
+func (s *SparkApiClient) GetApplicationStreamingStatistics(
+	ctx context.Context,
+	app *SparkApplication,
+) (*SparkStreamingStatistics, error) {
+	stats := SparkStreamingStatistics{}
+
+	err := makeRequest(
+		s.sparkContextUiUrl + "/api/v1/applications/" + app.Id + "/streaming/statistics",
+		s.authenticator,
+		&stats,
+	)
+	if err != nil {
+		/*
+		// This depends on a change to the SDK that is not yet release.
+		httpErr, ok := err.(connectors.HttpError)
+		if !ok {
+			return nil, err
+		}
+
+		if httpErr.StatusCode == 404 {
+			// 404 _should_ mean there are no streaming listeners attached to
+			// the app. I am not sure if 404 is returned in other circumstances
+			// but for now assume not and return no response but also no error.
+			log.Debugf(
+				"received 404 from streaming statistics API for application %s; assuming app has no streaming listeners and ignoring",
+				app.Id,
+			)
+
+			return nil, nil
+		}
+		*/
+
+		return nil, err
+	}
+
+	return &stats, nil
+}
+
+func (s *SparkApiClient) GetApplicationStreamingReceivers(
+	ctx context.Context,
+	app *SparkApplication,
+) ([]SparkStreamingReceiver, error) {
+	receivers := []SparkStreamingReceiver{}
+
+	err := makeRequest(
+		s.sparkContextUiUrl + "/api/v1/applications/" + app.Id + "/streaming/receivers",
+		s.authenticator,
+		&receivers,
+	)
+	if err != nil {
+		/*
+		// This depends on a change to the SDK that is not yet release.
+		httpErr, ok := err.(connectors.HttpError)
+		if !ok {
+			return nil, err
+		}
+
+		if httpErr.StatusCode == 404 {
+			// 404 _should_ mean there are no streaming listeners attached to
+			// the app. I am not sure if 404 is returned in other circumstances
+			// but for now assume not and return no response but also no error.
+			log.Debugf(
+				"received 404 from streaming receivers API for application %s; assuming app has no streaming listeners and ignoring",
+				app.Id,
+			)
+
+			return nil, nil
+		}
+		*/
+
+		return nil, err
+	}
+
+	return receivers, nil
 }
 
 func makeRequest(

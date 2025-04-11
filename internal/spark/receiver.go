@@ -105,6 +105,18 @@ func (s *SparkMetricsReceiver) PollMetrics(
 			if err != nil {
 				errs = append(errs, err)
 			}
+
+			err = collectSparkAppStreamingMetrics(
+				ctx,
+				s.client,
+				app,
+				s.metricPrefix,
+				s.tags,
+				writer,
+			)
+			if err != nil {
+				errs = append(errs, err)
+			}
 		}(&sparkApp)
 	}
 
@@ -1415,6 +1427,157 @@ func collectSparkAppRDDMetrics(
 				writer,
 			)
 		}
+	}
+
+	return nil
+}
+
+func collectSparkAppStreamingMetrics(
+	ctx context.Context,
+	client *SparkApiClient,
+	sparkApp *SparkApplication,
+	metricPrefix string,
+	tags map[string]string,
+	writer chan <- model.Metric,
+) error {
+	stats, err := client.GetApplicationStreamingStatistics(ctx, sparkApp)
+	if err != nil {
+		return err
+	}
+
+	if stats == nil {
+		// no streaming stats for this app
+		return nil
+	}
+
+	log.Debugf("processing streaming statistics")
+
+	attrs := makeAppAttributesMap(
+		sparkApp,
+		tags,
+	)
+
+	writeGauge(
+		metricPrefix,
+		"app.streaming.receivers",
+		stats.NumReceivers,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.activeReceivers",
+		stats.NumActiveReceivers,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.inactiveReceivers",
+		stats.NumInactiveReceivers,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.totalCompletedBatches",
+		stats.NumTotalCompletedBatches,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.retainedCompletedBatches",
+		stats.NumRetainedCompletedBatches,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.activeBatches",
+		stats.NumActiveBatches,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.processedRecords",
+		stats.NumProcessedRecords,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.receivedRecords",
+		stats.NumReceivedRecords,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.averageInputRate",
+		stats.AvgInputRate,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.averageSchedulingDelay",
+		stats.AvgSchedulingDelay,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.averageProcessingTime",
+		stats.AvgProcessingTime,
+		attrs,
+		writer,
+	)
+	writeGauge(
+		metricPrefix,
+		"app.streaming.averageTotalDelay",
+		stats.AvgTotalDelay,
+		attrs,
+		writer,
+	)
+
+	receivers, err := client.GetApplicationStreamingReceivers(ctx, sparkApp)
+	if err != nil {
+		return err
+	}
+
+	if receivers == nil {
+		// no streaming stats for this app
+		// this shouldn't happen since we should only get here if there are
+		// streaming listeners because of the statistics call but just in case
+		return nil
+	}
+
+	for _, receiver := range receivers {
+		log.Debugf(
+			"processing receiver %s (%d)",
+			receiver.StreamName,
+			receiver.StreamId,
+		)
+
+		receiverAttrs := makeAppAttributesMap(
+			sparkApp,
+			tags,
+		)
+
+		receiverAttrs["sparkAppStreamId"] = receiver.StreamId
+		receiverAttrs["sparkAppStreamName"] = receiver.StreamName
+		receiverAttrs["sparkAppExecutorId"] = receiver.ExecutorId
+		receiverAttrs["sparkAppExecutorHost"] = receiver.ExecutorHost
+
+		writeGauge(
+			metricPrefix,
+			"app.streaming.receiver.averageEventRate",
+			receiver.AvgEventRate,
+			receiverAttrs,
+			writer,
+		)
 	}
 
 	return nil

@@ -278,6 +278,31 @@ type SparkRDD struct {
 	} `json:"partitions"`
 }
 
+type SparkStreamingStatistics struct {
+	StartTime					string			`json:"startTime"`
+	BatchDuration				int				`json:"batchDuration"`
+	NumReceivers				int				`json:"numReceivers"`
+	NumActiveReceivers			int				`json:"numActiveReceivers"`
+	NumInactiveReceivers		int				`json:"numInactiveReceivers"`
+	NumTotalCompletedBatches	int				`json:"numTotalCompletedBatches"`
+	NumRetainedCompletedBatches	int				`json:"numRetainedCompletedBatches"`
+	NumActiveBatches			int				`json:"numActiveBatches"`
+	NumProcessedRecords			int				`json:"numProcessedRecords"`
+	NumReceivedRecords			int				`json:"numReceivedRecords"`
+	AvgInputRate				float64			`json:"avgInputRate"`
+	AvgSchedulingDelay			float64			`json:"avgSchedulingDelay"`
+	AvgProcessingTime			float64			`json:"avgProcessingTime"`
+	AvgTotalDelay				float64			`json:"avgTotalDelay"`
+}
+
+type SparkStreamingReceiver struct {
+	StreamId					int				`json:"streamId"`
+	StreamName					string			`json:"streamName"`
+	ExecutorId					string			`json:"executorId"`
+	ExecutorHost				string			`json:"executorHost"`
+	AvgEventRate				float64			`json:"avgEventRate"`
+}
+
 func InitPipelines(
 	ctx context.Context,
 	i *integration.LabsIntegration,
