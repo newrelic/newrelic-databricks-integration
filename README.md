@@ -42,13 +42,13 @@ Databricks) and/or Spark telemetry from any Spark deployment. See the
    * [Job Run Data](#job-run-data)
    * [Pipeline Update Metrics](#pipeline-update-metrics)
    * [Pipeline Event Logs](#pipeline-event-logs)
+   * [Cluster Health](#cluster-health)
 * [Building](#building)
    * [Coding Conventions](#coding-conventions)
    * [Local Development](#local-development)
    * [Releases](#releases)
    * [Github Workflows](#github-workflows)
 * [Appendix](#appendix)
-   * [Monitoring Cluster Health](#monitoring-cluster-health)
 
 ## Important Notes
 
@@ -88,7 +88,7 @@ The Databricks Integration can be deployed on the driver node of a Databricks
 all-purpose, job, or pipeline [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
 using a [cluster-scoped init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html).
 The [init script](./init/cluster_init_integration.sh) uses custom
-[environment variables](https://docs.databricks.com/en/compute/configure.html#env-var)
+[environment variables](https://docs.databricks.com/aws/en/compute/configure#environment-variables)
 to specify configuration parameters necessary for the integration [configuration](#configuration).
 
 To install the [init script](./init/cluster_init_integration.sh) on an
@@ -102,8 +102,8 @@ all-purpose cluster, perform the following steps.
    workspace is [enabled for Unity Catalog](https://docs.databricks.com/en/data-governance/unity-catalog/get-started.html#step-1-confirm-that-your-workspace-is-enabled-for-unity-catalog),
    you should store the init script in a [Unity Catalog volume](https://docs.databricks.com/en/ingestion/file-upload/upload-to-volume.html).
 1. Navigate to the [`Compute`](https://docs.databricks.com/en/compute/clusters-manage.html#view-compute)
-   tab and select the desired all-purpose or job compute to open the compute
-   details UI.
+   tab and select the desired all-purpose compute to open the compute details
+   UI.
 1. Click the button labeled `Edit` to [edit the compute's configuration](https://docs.databricks.com/en/compute/clusters-manage.html#edit-a-compute).
 1. Follow the steps to [use the UI to configure a cluster-scoped init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html#configure-a-cluster-scoped-init-script-using-the-ui)
    and point to the location where you stored the init script in step 2 above.
@@ -140,21 +140,41 @@ to add the following environment variables.
 * `NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED` - Set to `true` to enable
   collection of Databricks Delta Live Tables [pipeline event logs](#pipeline-event-logs)
   from this cluster node or `false` to disable collection. Defaults to `true`.
-
-Note that the `NEW_RELIC_API_KEY` and `NEW_RELIC_ACCOUNT_ID` are currently
-unused but are required by the [new-relic-client-go](https://github.com/newrelic/newrelic-client-go)
-module used by the integration. Additionally, note that only the personal access
-token _or_ OAuth credentials need to be specified but not both. If both are
-specified, the OAuth credentials take precedence. Finally, make sure to restart
-the cluster following the configuration of the environment variables.
+* `NEW_RELIC_INFRASTRUCTURE_ENABLED` - Set to `true` to install the
+  [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+  on the driver and worker nodes of the [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster).
+  Defaults to `false`.
+* `NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED` - Set to `true` to enable collection
+  of the Spark driver and executor logs, the Spark driver event log, and the
+  driver and worker init script logs. Logs will be [forwarded](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/)
+  to [New Relic Logs](https://docs.newrelic.com/docs/logs/get-started/get-started-log-management/)
+  via the [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+  and therefore, setting this environment variable to `true` requires that the
+  `NEW_RELIC_INFRASTRUCTURE_ENABLED` environment variable also be set to `true`.
+  Defaults to `false`.
 
 **NOTE:**
+* The `NEW_RELIC_API_KEY` and `NEW_RELIC_ACCOUNT_ID` are currently unused but
+  are required by the [new-relic-client-go](https://github.com/newrelic/newrelic-client-go)
+  module used by the integration.
+* Only the personal access token _or_ OAuth credentials need to be specified but
+  not both. If both are specified, the OAuth credentials take precedence.
+* Sensitive data like credentials and API keys should never be specified
+  directly in custom [environment variables](https://docs.databricks.com/aws/en/compute/configure#environment-variables).
+  Instead, it is recommended to create a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
+  using the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html)
+  and [reference the secret in the environment variable](https://docs.databricks.com/aws/en/security/secrets/secrets-spark-conf-env-var#reference-a-secret-in-an-environment-variable).
+  See the [appendix](#appendix) for an [example](#example-creating-and-using-a-secret-for-your-new-relic-license-key)
+  of creating a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
+  and referencing it in a custom [environment variable](https://docs.databricks.com/aws/en/compute/configure#environment-variables).
 * To install the [init script](./init/cluster_init_integration.sh) on a job
   cluster, see the section [configure compute for jobs](https://docs.databricks.com/aws/en/jobs/compute)
   in the Databricks documentation.
 * To install the [init script](./init/cluster_init_integration.sh) on a pipeline
   cluster, see the section [configure compute for a DLT pipeline](https://docs.databricks.com/aws/en/dlt/configure-compute)
   in the Databricks documentation.
+* Make sure to restart the cluster following the configuration of the
+  environment variables.
 
 #### Deploy the integration on a host outside a Databricks cluster
 
@@ -2621,6 +2641,191 @@ added to the New Relic log entry.
 | `error.exceptions[N].class_name` | `databricksPipelineEventErrorExceptionNClassName` | string | Runtime class of the `N`th exception |
 | `error.exceptions[N].message` | `databricksPipelineEventErrorExceptionNMessage` | string | Exception message of the `N`th exception |
 
+### Cluster Health
+
+The [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+can be used to collect [infrastructure data](https://docs.newrelic.com/docs/infrastructure/infrastructure-data/default-infra-data/)
+like CPU and memory usage from the nodes in a Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+as well as the Spark driver and executor logs, the Spark driver event log, and
+the logs from all init scripts on the driver and worker nodes.
+
+#### Installing the New Relic Infrastructure Agent
+
+The [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+will be automatically installed on the driver and worker nodes of the cluster
+as part of the process of [deploying the integration on the driver node of a cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster)
+if the value of the `NEW_RELIC_INFRASTRUCTURE_ENABLED` environment variable is
+set to `true`. In addition, if the value of the environment variable
+`NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED` is set to `true`, the Spark driver and
+executor logs, the Spark driver event log, and the logs from all init scripts
+on the driver and worker nodes will be collected and [forwarded](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/)
+to [New Relic Logs](https://docs.newrelic.com/docs/logs/get-started/get-started-log-management/).
+
+#### Cluster Health Data
+
+##### Cluster health infrastructure data
+
+When installed, the [New Relic infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+collects [all default infrastructure monitoring data](https://docs.newrelic.com/docs/infrastructure/infrastructure-data/default-infra-data/)
+for the driver and worker nodes. Additionally, a host entity will show up for
+each node in the cluster.
+
+##### Cluster health logs
+
+When [log forwarding](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/)
+is configured, the following logs are collected.
+
+* Spark driver standard out and standard error logs
+* Spark driver [log4j](https://logging.apache.org/log4j/2.x/index.html) log
+* Spark event log
+* Standard out and standard error logs for all [init scripts](https://docs.databricks.com/aws/en/init-scripts/)
+  on the driver node
+* Spark application executor standard out and standard error logs
+* Standard out and standard error logs for all [init scripts](https://docs.databricks.com/aws/en/init-scripts/)
+  on the worker nodes
+
+##### Cluster health attributes
+
+The following attributes are included on all [infrastructure data](https://docs.newrelic.com/docs/infrastructure/infrastructure-data/default-infra-data/),
+all `Log` events collected by the [infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/),
+and on the host entities for all nodes in the cluster.
+
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `databricksWorkspaceHost` | string | The [instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) of the target Databricks instance |
+| `databricksClusterId` | string | The ID of the Databricks cluster where the metric, event, or `Log` originated from. On a host entity, the ID of the cluster the host is a part of. |
+| `databricksClusterName` | string | The name of the Databricks cluster where the metric, event, or `Log` originated from. On a host entity, the name of the cluster the host is a part of. |
+| `databricksIsDriverNode` | string | `true` if the metric, event, or `Log` originated from the driver node. `false` if the metric, event, or `Log` originated from a worker node. On a host entity, `true` if the host is the driver node or `false` if it is a worker node. |
+| `databricksIsJobCluster` | string | `true` if the Databricks cluster where the metric, event or `Log` originated from is a job cluster, otherwise `false`. On a host entity, `true` if the cluster the host is a part of is a job cluster, otherwise `false`. |
+| `databricksLogType` | string | The [type](#cluster-health-log-types) of log that generated the `Log` event. Only included on [cluster health `Log` events](#cluster-health-logs). |
+
+##### Cluster health log types
+
+The `databricksLogType` attribute can have one of the following values. These
+values can be used to determine the log which generated the `Log` event.
+
+* `driver-stdout`
+
+  Indicates the `Log` event originated from the driver standard out log.
+
+* `driver-stderr`
+
+  Indicates the `Log` event originated from the driver standard error log.
+
+* `driver-log4j`
+
+  Indicates the `Log` event originated from the driver [log4j](https://logging.apache.org/log4j/2.x/index.html)
+  log.
+
+* `spark-eventlog`
+
+  Indicates the `Log` event originated from the Spark event log.
+
+* `driver-init-script-stdout`
+
+  Indicates the `Log` event originated from the standard out log of an [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  on the driver node. The specific [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  can be determined by examining the `filePath` attribute.
+
+* `driver-init-script-stderr`
+
+  Indicates the `Log` event originated from the standard error log of an [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  on the driver node. The specific [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  can be determined by examining the `filePath` attribute.
+
+* `executor-stdout`
+
+  Indicates the `Log` event originated from the standard out log of a Spark
+  application executor. The specific Spark application can be determined by
+  examining the `filePath` attribute.
+
+* `executor-stderr`
+
+  Indicates the `Log` event originated from the standard error log of a Spark
+  application executor. The specific Spark application can be determined by
+  examining the `filePath` attribute.
+
+* `worker-init-script-stdout`
+
+  Indicates the `Log` event originated from the standard out log of an [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  on a worker node. The specific [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  can be determined by examining the `filePath` attribute. The specific worker
+  node can be determined by examining the `hostname` or `fullHostname`
+  attributes.
+
+* `worker-init-script-stderr`
+
+  Indicates the `Log` event originated from the standard error log of an [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  on a worker node. The specific [init script](https://docs.databricks.com/aws/en/init-scripts/)
+  can be determined by examining the `filePath` attribute. The specific worker
+  node can be determined by examining the `hostname` or `fullHostname`
+  attributes.
+
+#### Example Cluster Health Queries
+
+**Driver node average CPU by cluster and entity name**
+
+```sql
+FROM SystemSample
+SELECT average(cpuPercent)
+WHERE databricksIsDriverNode = 'true'
+FACET databricksClusterName, entityName
+TIMESERIES
+```
+
+**Worker node average CPU by cluster and entity name**
+
+```sql
+FROM SystemSample
+SELECT average(cpuPercent)
+WHERE databricksIsDriverNode = 'false'
+FACET databricksClusterName, entityName
+TIMESERIES
+```
+
+**Spark driver [log4j](https://logging.apache.org/log4j/2.x/index.html) logs**
+
+```sql
+WITH position(databricksWorkspaceHost, '.') AS firstDot
+FROM Log
+SELECT substring(databricksWorkspaceHost, 0, firstDot) AS 'Workspace', databricksClusterName AS 'Cluster', hostname AS Hostname, level AS Level, message AS Message
+WHERE databricksClusterId IS NOT NULL
+ AND databricksLogType = 'driver-log4j'
+LIMIT 1000
+```
+
+**Spark event logs**
+
+```sql
+WITH position(databricksWorkspaceHost, '.') AS firstDot,
+ capture(filePath, r'/databricks/driver/eventlogs/(?P<sparkContextId>[^/]+)/.*') AS sparkContextId
+FROM Log
+SELECT substring(databricksWorkspaceHost, 0, firstDot) AS 'Workspace', databricksClusterName AS 'Cluster', sparkContextId AS 'Spark Context ID', Event, `App Name`, `Job ID`, `Stage Info.Stage ID` AS 'Stage ID', `Task Info.Task ID` AS 'Task ID'
+WHERE databricksClusterId IS NOT NULL
+ AND databricksLogType = 'spark-eventlog'
+LIMIT 1000
+```
+
+**Spark application executor standard out logs**
+
+```sql
+WITH position(databricksWorkspaceHost, '.') AS firstDot,
+ capture(filePath, r'/databricks/spark/work/(?P<appName>[^/]+)/.*') AS appName
+FROM Log
+SELECT substring(databricksWorkspaceHost, 0, firstDot) AS 'Workspace', databricksClusterName AS 'Cluster', hostname AS Hostname, appName AS Application, message AS Message
+WHERE databricksClusterId IS NOT NULL
+ AND databricksLogType = 'executor-stdout'
+LIMIT 1000
+```
+
+#### Example Cluster Health Dashboard
+
+A [sample dashboard](./examples/cluster-health-dashboard.json) is included
+that shows examples of visualizing cluster health metrics and logs and the NRQL
+statements to use to visualize the data.
+
+![Sample cluster health dashboard image](./examples/cluster-health-dashboard.png)
+
 ## Building
 
 ### Coding Conventions
@@ -2723,42 +2928,19 @@ certain GitHub events.
 
 ## Appendix
 
-The sections below cover topics that are related to Databricks telemetry but
-that are not specifically part of this integration. In particular, any assets
-referenced in these sections must be installed and/or managed _separately_ from
-the integration. For example, the init scripts provided to [monitor cluster health](#monitoring-cluster-health)
-are not automatically installed or used by the integration.
+### Example: Creating and Using a Secret for your New Relic License Key
 
-### Monitoring Cluster Health
-
-[New Relic Infrastructure](https://docs.newrelic.com/docs/infrastructure/infrastructure-monitoring/get-started/get-started-infrastructure-monitoring/)
-can be used to collect system metrics like CPU and memory usage from the nodes in
-a Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster).
-Additionally, [New Relic APM](https://docs.newrelic.com/docs/apm/new-relic-apm/getting-started/introduction-apm/)
-can be used to collect application metrics like JVM heap size and GC cycle count
-from the [Apache Spark](https://spark.apache.org/docs/latest/index.html) driver
-and executor JVMs. Both are achieved using [cluster-scoped init scripts](https://docs.databricks.com/en/init-scripts/cluster-scoped.html).
-The sections below cover the installation of these init scripts.
-
-**NOTE:** Use of one or both init scripts will have a slight impact on cluster
-startup time. Therefore, consideration should be given when using the init
-scripts with a job cluster, particularly when using a job cluster scoped to a
-single task.
-
-#### Configure the New Relic license key
-
-Both the [New Relic Infrastructure Agent init script](#install-the-new-relic-infrastructure-agent-init-script)
-and the [New Relic APM Java Agent init script](#install-the-new-relic-apm-java-agent-init-script)
-require a [New Relic license key](https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/#overview-keys)
-to be specified in a [custom environment variable](https://docs.databricks.com/en/compute/configure.html#environment-variables)
-named `NEW_RELIC_LICENSE_KEY`. While the license key _can_ be specified by
-hard-coding it in plain text in the compute configuration, this is not
-recommended. Instead, it is recommended to create a [secret](https://docs.databricks.com/en/security/secrets/secrets.html).
+Sensitive data like credentials and API keys should never be specified directly
+in custom [environment variables](https://docs.databricks.com/aws/en/compute/configure#environment-variables).
+Instead, it is recommended to create a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
 using the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html)
-and [reference the secret in the environment variable](https://docs.databricks.com/en/security/secrets/secrets.html#reference-a-secret-in-an-environment-variable).
+and [reference the secret in the environment variable](https://docs.databricks.com/aws/en/security/secrets/secrets-spark-conf-env-var#reference-a-secret-in-an-environment-variable).
 
-To create the secret and set the environment variable, perform the following
-steps.
+For example, the [init script](./init/cluster_init_integration.sh) used to
+install the Databricks Integration when [deploying the integration on the driver node of a cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster)
+requires the New Relic license key to be specified in the environment variable
+named `NEW_RELIC_LICENSE_KEY`. The steps below show an example of how to create
+a secret for the New Relic license key and [reference it in a custom environment variable](https://docs.databricks.com/aws/en/security/secrets/secrets-spark-conf-env-var#reference-a-secret-in-an-environment-variable).
 
 1. Follow the steps to [install or update the Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/install.html).
 1. Use the Databricks CLI to create a [Databricks-backed secret scope](https://docs.databricks.com/en/security/secrets/secret-scopes.html#create-a-databricks-backed-secret-scope)
@@ -2788,103 +2970,6 @@ and add the following line after the last entry in the `Environment variables`
 field.
 
 `NEW_RELIC_LICENSE_KEY={{secrets/newrelic/licenseKey}}`
-
-#### Install the New Relic Infrastructure Agent init script
-
-The [`cluster_init_infra.sh`](./examples/cluster_init_infra.sh) script
-automatically installs the latest version of the
-[New Relic Infrastructure Agent](https://docs.newrelic.com/docs/infrastructure/infrastructure-monitoring/get-started/get-started-infrastructure-monitoring/)
-on each node of the cluster.
-
-To install the init script, perform the following steps.
-
-1. Login to your Databricks account and navigate to the desired
-   [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
-1. Follow [the recommendations for init scripts](https://docs.databricks.com/en/init-scripts/index.html#recommendations-for-init-scripts)
-   to store the [`cluster_init_infra.sh`](./examples/cluster_init_infra.sh)
-   script within your workspace in the recommended manner. For example, if your
-   workspace is [enabled for Unity Catalog](https://docs.databricks.com/en/data-governance/unity-catalog/get-started.html#step-1-confirm-that-your-workspace-is-enabled-for-unity-catalog),
-   you should store the init script in a [Unity Catalog volume](https://docs.databricks.com/en/ingestion/file-upload/upload-to-volume.html).
-1. Navigate to the [`Compute`](https://docs.databricks.com/en/compute/clusters-manage.html#view-compute)
-   tab and select the desired all-purpose or job compute to open the compute
-   details UI.
-1. Click the button labeled `Edit` to [edit](https://docs.databricks.com/en/compute/clusters-manage.html#edit-a-compute)
-   the compute's configuration.
-1. Follow the steps to [use the UI to configure a cluster to run an init script](https://docs.databricks.com/en/init-scripts/cluster-scoped.html#configure-a-cluster-scoped-init-script-using-the-ui)
-   and point to the location where you stored the init script in step 2.
-1. If your cluster is not running, click on the button labeled `Confirm` to
-   save your changes. Then, restart the cluster. If your cluster is already
-   running, click on the button labeled `Confirm and restart` to save your
-   changes and restart the cluster.
-
-#### Install the New Relic APM Java Agent init script
-
-The [`cluster_init_apm.sh`](./examples/cluster_init_apm.sh) script
-automatically installs the latest version of the
-[New Relic APM Java Agent](https://docs.newrelic.com/docs/apm/agents/java-agent/getting-started/introduction-new-relic-java/)
-on each node of the cluster.
-
-To install the init script, perform the same steps as outlined in the
-[Install the New Relic Infrastructure Agent init script](#install-the-new-relic-infrastructure-agent-init-script)
-section using the [`cluster_init_apm.sh`](./examples/cluster_init_apm.sh) script
-instead of the [`cluster_init_infra.sh`](./examples/cluster_init_infra.sh)
-script.
-
-Additionally, perform the following steps.
-
-1. Login to your Databricks account and navigate to the desired
-   [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
-1. Navigate to the [`Compute`](https://docs.databricks.com/en/compute/clusters-manage.html#view-compute)
-   tab and select the desired all-purpose or job compute to open the compute
-   details UI.
-1. Click the button labeled `Edit` to [edit](https://docs.databricks.com/en/compute/clusters-manage.html#edit-a-compute)
-   the compute's configuration.
-1. Follow the steps to [configure custom Spark configuration properties](https://docs.databricks.com/en/compute/configure.html#spark-configuration)
-   and add the following lines after the last entry in the `Spark Config` field.
-
-   ```
-   spark.driver.extraJavaOptions -javaagent:/databricks/jars/newrelic-agent.jar
-   spark.executor.extraJavaOptions -javaagent:/databricks/jars/newrelic-agent.jar -Dnewrelic.tempdir=/tmp
-   ```
-
-1. If your cluster is not running, click on the button labeled `Confirm` to
-   save your changes. Then, restart the cluster. If your cluster is already
-   running, click on the button labeled `Confirm and restart` to save your
-   changes and restart the cluster.
-
-#### Viewing your cluster data
-
-With the New Relic Infrastructure Agent init script installed, a host entity
-will show up for each node in the cluster.
-
-With the New Relic APM Java Agent init script installed, an APM application
-entity named `Databricks Driver` will show up for the Spark driver JVM and an
-APM application entity named `Databricks Executor` will show up for the
-executor JVMs. Note that all executor JVMs will report to a single APM
-application entity. Metrics for a specific executor can be viewed on many pages
-of the [APM UI](https://docs.newrelic.com/docs/apm/apm-ui-pages/monitoring/response-time-chart-types-apm-browser/)
-by selecting the instance from the `Instances` menu located below the time range
-selector. On the [JVM Metrics page](https://docs.newrelic.com/docs/apm/agents/java-agent/features/jvms-page-java-view-app-server-metrics-jmx/),
-the JVM metrics for a specific executor can be viewed by selecting an instance
-from the `JVM instances` table.
-
-Additionally, both the host entities and the APM entities are tagged with the
-tags listed below to make it easy to filter down to the entities that make up
-your cluster using the [entity filter bar](https://docs.newrelic.com/docs/new-relic-solutions/new-relic-one/core-concepts/search-filter-entities/)
-that is available in many places in the UI.
-
-* `databricksClusterId` - The ID of the Databricks cluster
-* `databricksClusterName` - The name of the Databricks cluster
-* `databricksIsDriverNode` - `true` if the entity is on the driver node,
-   otherwise `false`
-* `databricksIsJobCluster` - `true` if the entity is part of a [job cluster](https://docs.databricks.com/en/jobs/use-compute.html),
-   otherwise `false`
-
-Below is an example of using the `databricksClusterName` to filter down to the
-host and APM entities for a single cluster using the [entity filter bar](https://docs.newrelic.com/docs/new-relic-solutions/new-relic-one/core-concepts/search-filter-entities/)
-on the `All entities` view.
-
-![infra and apm cluster filter example](./examples/cluster-infra-apm.png)
 
 ## Support
 

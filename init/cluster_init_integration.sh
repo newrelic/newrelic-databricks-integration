@@ -1,10 +1,301 @@
 #!/bin/bash
 
-# Don't install the integration on executors
+NEW_RELIC_INFRASTRUCTURE_ENABLED=${NEW_RELIC_INFRASTRUCTURE_ENABLED:-"false"}
+NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED=${NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED:-"false"}
 
+if [ "$NEW_RELIC_INFRASTRUCTURE_ENABLED" = "true" ]; then
+  NEW_RELIC_INFRA_CONFIG_FILE="/etc/newrelic-infra.yml"
+  NEW_RELIC_INFRA_DATABRICKS_DIR="/databricks/driver/newrelic-infra"
+
+  mkdir -p $NEW_RELIC_INFRA_DATABRICKS_DIR
+
+  # Add New Relic's Infrastructure Agent gpg key
+  curl -fsSL https://download.newrelic.com/infrastructure_agent/gpg/newrelic-infra.gpg | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/newrelic-infra.gpg
+
+  # Create a manifest file
+  echo "deb https://download.newrelic.com/infrastructure_agent/linux/apt/ jammy main" | sudo tee -a /etc/apt/sources.list.d/newrelic-infra.list
+
+  # Run an update
+  sudo apt-get update
+
+  # Install the New Relic Infrastructure agent
+  sudo apt-get install newrelic-infra -y
+
+  # Create the agent config file
+  sudo cat <<EOM >> $NEW_RELIC_INFRA_CONFIG_FILE
+license_key: $NEW_RELIC_LICENSE_KEY
+log:
+  level: info
+  forward: true
+  format: json
+custom_attributes:
+  databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+  databricksClusterId: $DB_CLUSTER_ID
+  databricksClusterName: $DB_CLUSTER_NAME
+  databricksIsDriverNode: $DB_IS_DRIVER
+  databricksIsJobCluster: $DB_IS_JOB_CLUSTER
+EOM
+
+  if [ "$NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED" = "true" ]; then
+    DRIVER_INIT_SCRIPT_LOGS_PATH="/databricks/init_scripts"
+    DRIVER_LOGS_PATH="/databricks/driver/logs"
+    DRIVER_EVENT_LOGS_PATH="/databricks/driver/eventlogs/*"
+    EXECUTOR_LOGS_PATH="/databricks/spark/work/app-*/*"
+    WORKER_INIT_SCRIPT_LOGS_PATH="/databricks/init_scripts"
+
+    if [ "$DB_IS_DRIVER" = "TRUE" ]; then
+      sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit.conf
+[INPUT]
+    Name tail
+    Tag stdout.data
+    Path $DRIVER_LOGS_PATH/stdout
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag stderr.data
+    Path $DRIVER_LOGS_PATH/stderr
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag log4j.data
+    Path $DRIVER_LOGS_PATH/log4j-active.log
+    Path_Key filePath
+    Multiline On
+    Parser_Firstline log4j_parser
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag init_scripts_stdout.data
+    Path $DRIVER_INIT_SCRIPT_LOGS_PATH/*.stdout.log
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag init_scripts_stderr.data
+    Path $DRIVER_INIT_SCRIPT_LOGS_PATH/*.stderr.log
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag eventlog.data
+    Path $DRIVER_EVENT_LOGS_PATH/eventlog
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 512k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[FILTER]
+    Name record_modifier
+    Match stdout.data
+    Record databricksLogType driver-stdout
+
+[FILTER]
+    Name parser
+    Match stdout.data
+    Key_Name message
+    Parser stdout_parser
+    Reserve_Data On
+
+[FILTER]
+    Name record_modifier
+    Match stderr.data
+    Record databricksLogType driver-stderr
+
+[FILTER]
+    Name parser
+    Match stderr.data
+    Key_Name message
+    Parser stderr_parser
+    Reserve_Data On
+
+[FILTER]
+    Name record_modifier
+    Match log4j.data
+    Record databricksLogType driver-log4j
+
+[FILTER]
+    Name record_modifier
+    Match init_scripts_stdout.data
+    Record databricksLogType driver-init-script-stdout
+
+[FILTER]
+    Name record_modifier
+    Match init_scripts_stderr.data
+    Record databricksLogType driver-init-script-stderr
+
+[FILTER]
+    Name record_modifier
+    Match eventlog.data
+    Record databricksLogType spark-eventlog
+EOM
+
+      sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit-parsers.conf
+[PARSER]
+    Name stdout_parser
+    Format regex
+    Regex ^(?<time>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}[+-][0-9]{4}):\s+(?<message>.*)$
+    Time_Key time
+    Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+    Time_Keep On
+
+[PARSER]
+    Name stderr_parser
+    Format regex
+    Regex ^(?<time>[a-zA-Z]+\s+[a-zA-Z]+\s+[0-9]+\s+[0-9]{2}:[0-9]{2}:[0-9]{2}\s+[0-9]{4})\s+(?<message>.*)$
+    Time_Key time
+    Time_Format %a%t%b%t%d%t%H:%M:%S%t%Y
+    Time_Keep On
+
+[PARSER]
+    Name log4j_parser
+    Format regex
+    Regex ^(?<time>[0-9]{2}\/[0-9]{2}\/[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})\s+(?<level>[a-zA-Z]+)\s+(?<message>.*)$
+    Time_Key time
+    Time_Format %y/%m/%d%t%H:%M:%S
+    Time_Keep On
+EOM
+    else
+      sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit.conf
+[INPUT]
+    Name tail
+    Tag stdout.data
+    Path $EXECUTOR_LOGS_PATH/stdout
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag stderr.data
+    Path $EXECUTOR_LOGS_PATH/stderr
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag init_scripts_stdout.data
+    Path $WORKER_INIT_SCRIPT_LOGS_PATH/*.stdout.log
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[INPUT]
+    Name tail
+    Tag init_scripts_stderr.data
+    Path $WORKER_INIT_SCRIPT_LOGS_PATH/*.stderr.log
+    Path_Key filePath
+    Key message
+    Buffer_Max_Size 128k
+    Mem_Buf_Limit 16384k
+    Skip_Long_Lines On
+
+[FILTER]
+    Name record_modifier
+    Match stdout.data
+    Record databricksLogType executor-stdout
+
+[FILTER]
+    Name parser
+    Match stdout.data
+    Key_Name message
+    Parser stdout_parser
+    Reserve_Data On
+
+[FILTER]
+    Name record_modifier
+    Match stderr.data
+    Record databricksLogType executor-stderr
+
+[FILTER]
+    Name parser
+    Match stderr.data
+    Key_Name message
+    Parser stderr_parser
+    Reserve_Data On
+
+[FILTER]
+    Name record_modifier
+    Match init_scripts_stdout.data
+    Record databricksLogType worker-init-script-stdout
+
+[FILTER]
+    Name record_modifier
+    Match init_scripts_stderr.data
+    Record databricksLogType worker-init-script-stderr
+EOM
+
+      sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit-parsers.conf
+[PARSER]
+    Name stdout_parser
+    Format regex
+    Regex ^(?<time>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}[+-][0-9]{4}):\s+(?<message>.*)$
+    Time_Key time
+    Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+    Time_Keep On
+
+[PARSER]
+    Name stderr_parser
+    Format regex
+    Regex ^(?<time>[0-9]{2}\/[0-9]{2}\/[0-9]{2}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})\s+(?<level>[a-zA-Z]+)\s+(?<message>.*)$
+    Time_Key time
+    Time_Format %y/%m/%d%t%H:%M:%S
+    Time_Keep On
+EOM
+    fi
+
+    sudo cat <<EOM > /etc/newrelic-infra/logging.d/logging.yml
+logs:
+- name: databricks-cluster-logs
+  fluentbit:
+    config_file: $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit.conf
+    parsers_file: $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit-parsers.conf
+EOM
+
+  fi
+
+  # Start the agent
+  sudo systemctl start newrelic-infra
+fi
+
+# Don't install the integration on executors
 if [ "$DB_IS_DRIVER" != "TRUE" ]; then
   exit
 fi
+
+# Set environment variables with defaults
+NEW_RELIC_DATABRICKS_USAGE_ENABLED=${NEW_RELIC_DATABRICKS_USAGE_ENABLED:-"false"}
+NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED=${NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED:-"true"}
 
 # Define the version, download dir and target dir
 NEW_RELIC_DATABRICKS_TMP_DIR="/tmp/newrelic-databricks-integration"
@@ -58,8 +349,11 @@ spark:
   webUiUrl: http://{UI_HOST}:{UI_PORT}
   metricPrefix: spark.
 tags:
+  databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   databricksClusterId: $DB_CLUSTER_ID
   databricksClusterName: $DB_CLUSTER_NAME
+  databricksIsDriverNode: $DB_IS_DRIVER
+  databricksIsJobCluster: $DB_IS_JOB_CLUSTER
 EOF
 
 chmod 600 $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
