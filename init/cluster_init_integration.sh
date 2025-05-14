@@ -296,6 +296,7 @@ NEW_RELIC_DATABRICKS_USAGE_ENABLED=${NEW_RELIC_DATABRICKS_USAGE_ENABLED:-"false"
 NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED=${NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED:-"true"}
 NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED:-"true"}
 NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED:-"true"}
 
 # Define the version, download dir and target dir
 NEW_RELIC_DATABRICKS_TMP_DIR="/tmp/newrelic-databricks-integration"
@@ -345,6 +346,13 @@ databricks:
       intervalOffset: 5
     logs:
       enabled: $NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED
+  queries:
+    metrics:
+      enabled: $NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED
+      includeIdentityMetadata: false
+      startOffset: 600
+      intervalOffset: 5
+      maxResults: 100
 spark:
   webUiUrl: http://{UI_HOST}:{UI_PORT}
   metricPrefix: spark.
