@@ -228,6 +228,71 @@ func InitPipelines(
 		i.AddComponent(mp)
 	}
 
+	collectQueryMetrics := true
+	if viper.IsSet("databricks.queries.metrics.enabled") {
+		collectQueryMetrics = viper.GetBool(
+			"databricks.queries.metrics.enabled",
+		)
+	}
+
+	if collectQueryMetrics {
+		// Initialize caches so we can lookup warehouse names for queries
+		initInfoByIdCaches(w)
+
+		// @todo: at some point, all the checks like this should be converted
+		// to use viper.SetDefault(). Then the IsSet() is not necessary. For
+		// now, we will leave it as is as we don't gain much by changing. Also,
+		// then the difference between using GetInt() (below) and GetInt64()
+		// (above) can be changed to use GetInt64() everywhere.
+		startOffset := DEFAULT_QUERY_HISTORY_START_OFFSET
+		if viper.IsSet("databricks.queries.metrics.startOffset") {
+			startOffset = viper.GetInt(
+				"databricks.queries.metrics.startOffset",
+			)
+		}
+
+		intervalOffset := DEFAULT_QUERY_HISTORY_INTERVAL_OFFSET
+		if viper.IsSet("databricks.queries.metrics.intervalOffset") {
+			intervalOffset = viper.GetInt(
+				"databricks.queries.metrics.intervalOffset",
+			)
+		}
+
+		maxResults := DEFAULT_QUERY_HISTORY_MAX_RESULTS
+		if viper.IsSet("databricks.queries.metrics.maxResults") {
+			maxResults = viper.GetInt(
+				"databricks.queries.metrics.maxResults",
+			)
+		}
+
+		databricksQueryMetricsReceiver, err :=
+			NewDatabricksQueryMetricsReceiver(
+				i,
+				w,
+				time.Duration(startOffset) * time.Second,
+				time.Duration(intervalOffset) * time.Second,
+				maxResults,
+				viper.GetBool(
+					"databricks.queries.metrics.includeIdentityMetadata",
+				),
+				tags,
+			)
+		if err != nil {
+			return err
+		}
+
+		// Create an events pipeline for the query metrics
+		ep := pipeline.NewEventsPipeline(
+			"databricks-query-metrics-pipeline",
+		)
+		ep.AddReceiver(databricksQueryMetricsReceiver)
+		ep.AddExporter(newRelicExporter)
+
+		log.Debugf("initializing Databricks query metrics pipeline")
+
+		i.AddComponent(ep)
+	}
+
 	return nil
 }
 

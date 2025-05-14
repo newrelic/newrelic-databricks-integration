@@ -87,44 +87,53 @@ func (m *memoryCache[T]) invalidate() {
 
 // @todo: allow cache expiry values to be configured
 
+// This function is not thread-safe and should not be called concurrently.
+// For now it is only called from databricks.go in the function InitPipelines()
+// so it is safe to assume that it will not be called concurrently.
 func initInfoByIdCaches(
 	w *databricksSdk.WorkspaceClient,
 ) {
-	workspaceInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (**workspaceInfo, error) {
-			workspaceInfo, err := buildWorkspaceInfo(ctx, w)
-			if err != nil {
-				return nil, err
-			}
+	if workspaceInfoCache == nil {
+		workspaceInfoCache = newMemoryCache(
+			5 * time.Minute,
+			func(ctx context.Context) (**workspaceInfo, error) {
+				workspaceInfo, err := buildWorkspaceInfo(ctx, w)
+				if err != nil {
+					return nil, err
+				}
 
-			return &workspaceInfo, nil
-		},
-	)
+				return &workspaceInfo, nil
+			},
+		)
+	}
 
-	clusterInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (*map[string]*clusterInfo, error) {
-			m, err := buildClusterInfoByIdMap(ctx, w)
-			if err != nil {
-				return nil, err
-			}
+	if clusterInfoCache == nil {
+		clusterInfoCache = newMemoryCache(
+			5 * time.Minute,
+			func(ctx context.Context) (*map[string]*clusterInfo, error) {
+				m, err := buildClusterInfoByIdMap(ctx, w)
+				if err != nil {
+					return nil, err
+				}
 
-			return &m, nil
-		},
-	)
+				return &m, nil
+			},
+		)
+	}
 
-	warehouseInfoCache = newMemoryCache(
-		5 * time.Minute,
-		func(ctx context.Context) (*map[string]*warehouseInfo, error) {
-			m, err := buildWarehouseInfoByIdMap(ctx, w)
-			if err != nil {
-				return nil, err
-			}
+	if warehouseInfoCache == nil {
+		warehouseInfoCache = newMemoryCache(
+			5 * time.Minute,
+			func(ctx context.Context) (*map[string]*warehouseInfo, error) {
+				m, err := buildWarehouseInfoByIdMap(ctx, w)
+				if err != nil {
+					return nil, err
+				}
 
-			return &m, nil
-		},
-	)
+				return &m, nil
+			},
+		)
+	}
 }
 
 func buildWorkspaceInfo(

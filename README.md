@@ -43,6 +43,7 @@ Databricks) and/or Spark telemetry from any Spark deployment. See the
    * [Pipeline Update Metrics](#pipeline-update-metrics)
    * [Pipeline Event Logs](#pipeline-event-logs)
    * [Cluster Health](#cluster-health)
+   * [Query Metrics](#query-metrics)
 * [Building](#building)
    * [Coding Conventions](#coding-conventions)
    * [Local Development](#local-development)
@@ -140,6 +141,9 @@ to add the following environment variables.
 * `NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED` - Set to `true` to enable
   collection of Databricks Delta Live Tables [pipeline event logs](#pipeline-event-logs)
   from this cluster node or `false` to disable collection. Defaults to `true`.
+* `NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED` - Set to `true` to enable
+  collection of Databricks [query metrics](#query-metrics) for this workspace
+  or `false` to disable collection. Defaults to `true`.
 * `NEW_RELIC_INFRASTRUCTURE_ENABLED` - Set to `true` to install the
   [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
   on the driver and worker nodes of the [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster).
@@ -569,6 +573,16 @@ This element groups together the configuration parameters to [configure](#databr
 the Databricks collector settings related to the collection of [Databricks Delta Live Tables Pipelines](https://docs.databricks.com/en/delta-live-tables/develop-pipelines.html)
 telemetry.
 
+###### `queries`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The root node for the set of [Databricks Query configuration](#databricks-query-configuration) parameters | YAML Mapping | N | N/a |
+
+This element groups together the configuration parameters to [configure](#databricks-query-configuration)
+the Databricks collector settings related to the collection of Databricks query
+telemetry.
+
 ##### Databricks Usage Configuration
 
 The Databricks usage configuration parameters are used to configure Databricks
@@ -910,6 +924,108 @@ of the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduct
 
 See the section [`intervalOffset` Configuration](#pipeline-intervaloffset-configuration)
 for more details.
+
+##### Databricks Query configuration
+
+###### `metrics`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The root node for the set of [Databricks Query Metrics configuration](#databricks-query-metrics-configuration) parameters | YAML Mapping | N | N/a |
+
+This element groups together the configuration parameters to [configure](#databricks-query-metrics-configuration)
+the Databricks collector settings related to the collection of Databricks
+[query metrics](#query-metrics).
+
+##### Databricks query metrics configuration
+
+The Databricks query metrics configuration parameters are used to configure
+Databricks collector settings related to the collection of Databricks
+[query metrics](#query-metrics).
+
+###### Databricks query metrics `enabled`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable automatic collection of Databricks [query metrics](#query-metrics) | `true` / `false` | N | `true` |
+
+By default, when the Databricks collector is enabled, it will automatically
+collect Databricks [query metrics](#query-metrics).
+
+This flag can be used to disable the collection of [query metrics](#query-metrics)
+by the Databricks collector. This may be useful when running multiple instances
+of the Databricks Integration against the same Databricks [workspace](https://docs.databricks.com/en/getting-started/concepts.html#accounts-and-workspaces).
+In this scenario, the collection of Databricks [query metrics](#query-metrics)
+should _only_ be enabled on a single instance of the integration. Otherwise,
+[query metrics](#query-metrics) will be recorded more than once, making
+troubleshooting challenging and affecting product features that use these
+metrics (e.g. [dashboards](https://docs.newrelic.com/docs/query-your-data/explore-query-data/dashboards/introduction-dashboards/)
+and [alerts](https://docs.newrelic.com/docs/alerts/overview/)).
+
+###### Databricks query metrics `includeIdentityMetadata`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable inclusion of identity related metadata in Databricks [query metric](#query-metrics) data | `true` / `false` | N | `false` |
+
+When the collection of Databricks [query metrics](#query-metrics) is [enabled](#databricks-query-metrics-enabled),
+the Databricks collector can include several pieces of identifying information
+along with the query metric data.
+
+By default, when the collection of Databricks [query metrics](#query-metrics)
+is [enabled](#databricks-query-metrics-enabled), the Databricks collector will
+_not_ collect such data as it may be personally identifiable. This flag can be
+used to enable the inclusion of the identifying information.
+
+When enabled, the following values are included.
+
+* The ID of the user that executed the query
+* The email address or username of the user that executed the query
+* The ID of the user whose credentials were used to execute the query
+* The email address or username whose credentials were used to execute the query
+* The identity of the warehouse creator of the [SQL warehouse](https://docs.databricks.com/en/compute/sql-warehouse/index.html)
+  where the query was executed
+
+###### Databricks query metrics `startOffset`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Offset (in seconds) to use for the start of the time range used on the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list) call | number | N | 600 |
+
+This parameter specifies an offset, in seconds, that the collector will use to
+calculate the start time of the time range used to call the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list).
+
+See the section [Query Metrics `startOffset` Configuration](#query-metrics-startoffset-configuration)
+for more details.
+
+###### Databricks query metrics `intervalOffset`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Offset (in seconds) to use for the time window used to check for terminated queries to account for any lag setting the query end time in the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list) | number | N | 5 |
+
+This parameter specifies an offset, in seconds, that the collector will use to
+offset the current time window when checking for terminated queries, allowing
+the query end time additional time to be reflected in the
+[list query history API](https://docs.databricks.com/api/workspace/queryhistory/list).
+
+See the section [Query Metrics `intervalOffset` Configuration](#query-metrics-intervaloffset-configuration)
+for more details.
+
+###### Databricks query metrics `maxResults`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The maximum number of query results to return per page when calling the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list) | number | N | 100 |
+
+This parameter specifies the maximum number of query results to return per page
+when listing queries via the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+
+**NOTE:**
+For performance reasons, since the integration retrieves query metrics for each
+query using the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list),
+it is recommended to keep the `maxResults` parameter at its default value in
+most cases.
 
 ##### Spark configuration
 
@@ -2825,6 +2941,246 @@ that shows examples of visualizing cluster health metrics and logs and the NRQL
 statements to use to visualize the data.
 
 ![Sample cluster health dashboard image](./examples/cluster-health-dashboard.png)
+
+### Query Metrics
+
+The Databricks Integration can collect telemetry about queries executed in
+Databricks SQL warehouses and serverless compute, including execution times,
+query statuses, and query I/O metrics such as the number of bytes and rows read
+and the number of bytes spilled to disk and sent over the network. This feature
+is enabled by default and can be enabled or disabled using the [Databricks query metrics `enabled`](#databricks-query-metrics-enabled)
+flag in the [integration configuration](#configuration).
+
+**NOTE:**
+* Unlike other metrics collected by the integration, query metrics are only
+  recorded once a query has completed execution.
+* When [serverless compute](https://docs.databricks.com/aws/en/compute/serverless/)
+  is enabled, metrics for all SQL and Python queries executed on serverless
+  compute for notebooks and jobs are returned by the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+  used to collect query metrics.
+* Some of the text below is sourced from the documentation on
+  [Databricks queries](https://docs.databricks.com/aws/en/sql/user/queries/) and
+  the [Databricks SDK Go module documentation](https://pkg.go.dev/github.com/databricks/databricks-sdk-go).
+
+#### Query Metrics `startOffset` Configuration
+
+Query metrics are only collected once when the query terminates, that is, when
+it completes successfully, when it fails, or when it is canceled. Furthermore,
+query metrics are only collected for queries that terminated since the last
+execution of the integration. This way, query metrics are only collected once.
+
+Query metrics are collected using the [query history endpoint](https://docs.databricks.com/aws/en/sql/user/queries/query-history).
+of the [Databricks ReST API](https://docs.databricks.com/api/workspace/introduction)
+By default, this endpoint returns queries sorted in descending order by
+_start time_. This means that unless the time range used on the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+call includes the time when a query started, it will not be returned. Were the
+integration to only request the query history since the last execution of the
+integration, telemetry for queries that started prior to the last execution of
+the integration but completed since the last execution of the integration would
+not be recorded because they would not be returned.
+
+To account for this, the integration provides the [`startOffset`](#databricks-query-metrics-startoffset)
+configuration parameter. This parameter is used to offset the start time of the
+time range used on the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+call. The effect of this behavior is that metrics for queries that completed
+since the last execution of the integration but started prior to the last
+execution of the integration (up to [`startOffset`](#databricks-query-metrics-startoffset)
+seconds ago) will be recorded.
+
+For example, consider a query that started 3 minutes prior to the current
+execution of the integration but completed 10 seconds prior to the current
+execution of the integration. Using the default value of the [`interval`](#interval)
+configuration parameter, without a mechanism to effect the start time used to
+query the query history, the time range used on [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+would be 60 seconds ago until 0 seconds ago. Because the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+returns queries according to the _start time_ of the query, the example query
+would not be returned even though it completed since the last execution of the
+integration. Since the query is not returned, the query end time can not be
+checked against the time window and the query metrics will never be recorded.
+
+In contrast, with the default [`startOffset`](#databricks-query-metrics-startoffset)
+(600 seconds or 10 minutes), the example query would be returned even though it
+started before the last execution of the integration. Since the query is
+returned, the integration will see that the query completed since the last
+execution of the integration, and will record the query metrics for the query.
+
+**NOTE:**
+It is important to carefully select a value for the [`startOffset`](#databricks-query-metrics-startoffset)
+configuration parameter. Collecting query metrics with the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+is an expensive operation. A value should be chosen that accounts for as many
+long running queries as possible without negatively affecting the performance
+of the integration or the cost of executing the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list)
+call.
+
+#### Query Metrics `intervalOffset` Configuration
+
+Since query metrics are only collected if the query terminated since the last
+execution of the integration, if there is any lag setting the query end time,
+it is possible for some queries to be missed. For example, consider a query that
+ends one second prior to the current run time of the integration. If the end
+time of the query takes one second or more to be reflected in the API, the query
+end time will not be set during the current run of the integration and can not
+be checked. On the subsequent run of the integration, the query will be returned
+and it's end time will be set but the end time will fall just outside the last
+run time of the integration. As such, the metrics for the query will never be
+recorded.
+
+To account for this, the integration provides the [`intervalOffset`](#databricks-query-metrics-intervaloffset)
+configuration parameter. This parameter is used to slide the time window that
+the query end time is checked against by some number of seconds, allowing the
+query end time additional time to be reflected in the API. The default value for
+the [`intervalOffset`](#databricks-query-metrics-intervaloffset) configuration
+parameter is 5 seconds.
+
+#### Query Metric Data
+
+Query metric data is sent to New Relic as [events](https://docs.newrelic.com/docs/data-apis/understand-data/new-relic-data-types/#event-data).
+The following event attributes are provided.
+
+##### Query Event Attributes
+
+**NOTE:**
+Much of the text below is sourced from the file [`model.go`](https://github.com/databricks/databricks-sdk-go/blob/main/service/sql/model.go).
+
+| Attribute Name                | Data Type   | Description                                                                 |
+|-------------------------------|-------------|-----------------------------------------------------------------------------|
+| `id`                          | string      | The unique ID of the query                                                 |
+| `type`                        | string      | The query statement type (e.g., `SELECT`, `INSERT`)                        |
+| `status`                      | string      | The status of the query (e.g., `FINISHED`, `FAILED`, `CANCELED`)           |
+| `warehouseId`                 | string      | The ID of the SQL warehouse where the query was executed                   |
+| `warehouseName`               | string      | The name of the SQL warehouse where the query was executed                 |
+| `warehouseCreator`            | string      | The creator of the SQL warehouse where the query was executed (only included  if [`includeIdentityMetadata`](#databricks-query-metrics-includeidentitymetadata) is `true`) |
+| `workspaceId`                 | int         | The ID of the workspace containing the SQL warehouse where the query was executed |
+| `workspaceName`               | string      | The name of the workspace containing the SQL warehouse where the query was executed |
+| `workspaceUrl`                | string      | The URL of the workspace containing the SQL warehouse where the query was executed |
+| `duration`                    | int         | Total execution time of the statement in milliseconds (excluding result fetch time) |
+| `query`                       | string      | The query text, truncated to 4096 characters                               |
+| `plansState`                  | string      | Whether plans exist for the execution, or the reason why they are missing  |
+| `error`                       | bool        | Indicates whether the query failed                                         |
+| `errorMessage`                | string      | The error message if the query failed                                      |
+| `userId`                      | int         | The ID of the user who executed the query (only included  if [`includeIdentityMetadata`](#databricks-query-metrics-includeidentitymetadata) is `true`) |
+| `userName`                    | string      | The email address or username of the user who executed the query (only included  if [`includeIdentityMetadata`](#databricks-query-metrics-includeidentitymetadata) is `true`) |
+| `runAsUserId`                 | int         | The ID of the user whose credentials were used to run the query (only included  if [`includeIdentityMetadata`](#databricks-query-metrics-includeidentitymetadata) is `true`) |
+| `runAsUserName`               | string      | The email address or username of the user whose credentials were used to run the query (only included  if [`includeIdentityMetadata`](#databricks-query-metrics-includeidentitymetadata) is `true`) |
+| `executionEndTime`            | int         | The timestamp when the execution of the query ended, in milliseconds       |
+| `startTime`                   | int         | The timestamp when the query started, in milliseconds                      |
+| `endTime`                     | int         | The timestamp when the query ended, in milliseconds                        |
+| `final`                       | bool        | Indicates whether more updates for the query are expected                  |
+| `compilationTime`             | int         | The time spent loading metadata and optimizing the query, in milliseconds  |
+| `executionTime`               | int         | The time spent executing the query, in milliseconds                        |
+| `fetchTime`                   | int         | The time spent fetching the query results after the execution finished, in milliseconds |
+| `totalTime`                   | int         | The total execution time of the query from the client’s point of view, in milliseconds |
+| `totalTaskTime`               | int         | The sum of the execution time for all of the query’s tasks, in milliseconds |
+| `totalPhotonTime`             | int         | The total execution time for all individual Photon query engine tasks in the query, in milliseconds |
+| `overloadingQueueStartTime`   | int         | The timestamp when the query was enqueued waiting while the warehouse was at max load, in milliseconds. This field will be `0` if the query skipped the overloading queue. |
+| `provisioningQueueStartTime`  | int         | The timestamp when the query was enqueued waiting for a cluster to be provisioned for the warehouse, in milliseconds. This field will be `0` if the query skipped the provisioning queue. |
+| `compilationStartTime`        | int         | The timestamp when the underlying compute started compilation of the query, in milliseconds |
+| `fromCache`                   | bool        | Indicates whether the query result was fetched from the cache              |
+| `bytesRead`                   | int         | The total size of data read by the query, in bytes                         |
+| `cacheBytesRead`              | int         | The total size of persistent data read from the cache, in bytes            |
+| `filesRead`                   | int         | The total number of files read after pruning                               |
+| `partitionsRead`              | int         | The total number of partitions read after pruning                          |
+| `remoteBytesRead`             | int         | The size of persistent data read from cloud object storage on your cloud tenant, in bytes |
+| `rowsRead`                    | int         | The total number of rows read by the query                                 |
+| `rowsReturned`                | int         | The total number of rows returned by the query                             |
+| `bytesPruned`                 | int         | The total number of bytes in all tables not read due to pruning            |
+| `filesPruned`                 | int         | The total number of files from all tables not read due to pruning          |
+| `remoteBytesWritten`          | int         | The size of persistent data written to cloud object storage in your cloud tenant, in bytes |
+| `diskBytesSpilled`            | int         | The size of data temporarily written to disk while executing the query, in bytes |
+| `networkBytesSent`            | int         | The total amount of data sent over the network between executor nodes during shuffle, in bytes |
+
+#### Example Query Metric Queries
+
+**Total completed queries**
+
+```sql
+FROM DatabricksQuery
+SELECT count(*) AS Queries
+WHERE status = 'FINISHED'
+```
+
+**Total failed queries**
+
+```sql
+FROM DatabricksQuery
+SELECT count(*) AS Queries
+WHERE status = 'FAILED'
+```
+
+**Rate of successful queries per second**
+
+```sql
+FROM DatabricksQuery
+SELECT rate(count(*), 1 second) AS Queries
+WHERE status = 'FINISHED'
+TIMESERIES
+```
+
+**Number of failed queries by query text**
+
+```sql
+FROM DatabricksQuery
+SELECT count(*)
+WHERE status = 'FAILED'
+FACET query
+```
+
+**Average bytes spilled to disk by query text**
+
+```sql
+FROM DatabricksQuery
+SELECT average(diskBytesSpilled)
+WHERE diskBytesSpilled > 0
+ORDER BY diskBytesSpilled DESC
+FACET query
+```
+
+**Total duration of all queries run by warehouse**
+
+```sql
+FROM DatabricksQuery
+SELECT sum(duration) / 1000 AS Duration
+FACET warehouseName
+TIMESERIES
+```
+
+**Query history**
+
+```sql
+WITH
+ concat(workspaceUrl, '/sql/warehouses/', warehouseId, '/monitoring?queryId=', id) AS queryLink
+FROM DatabricksQuery
+SELECT
+ status as Status,
+ substring(query, 0, 100) as Query,
+ startTime as Started,
+ duration as Duration,
+ userName as User,
+ queryLink
+```
+
+**Queries with data spilling**
+
+```sql
+WITH
+ concat(workspaceUrl, '/sql/warehouses/', warehouseId, '/monitoring?queryId=', id) AS queryLink
+FROM DatabricksQuery
+SELECT
+ diskBytesSpilled,
+ query,
+ queryLink
+WHERE diskBytesSpilled > 0
+ORDER BY diskBytesSpilled DESC
+LIMIT 100
+```
+
+#### Example Query Metrics Dashboard
+
+A sample dashboard is included that shows examples of the types of query metric
+information that can be displayed and the NRQL statements to use to visualize
+the data.
+
+![Sample query metric dashboard image](./examples/query-metrics-dashboard.png)
 
 ## Building
 

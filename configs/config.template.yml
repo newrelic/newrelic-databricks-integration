@@ -43,6 +43,13 @@ databricks:
       intervalOffset: 5
     logs:
       enabled: true
+  queries:
+    metrics:
+      enabled: true
+      includeIdentityMetadata: false
+      startOffset: 600
+      intervalOffset: 5
+      maxResults: 100
 
 spark:
   webUiUrl: http://localhost:4040
