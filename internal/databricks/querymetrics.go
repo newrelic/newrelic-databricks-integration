@@ -249,6 +249,12 @@ func makeQueryEventAttrs(
 			query.QueryId,
 			err,
 		)
+	} else if warehouseInfo == nil {
+		log.Warnf(
+			"could not resolve warehouse ID %s to warehouse info while processing result for query %s: warehouse ID not found",
+			query.WarehouseId,
+			query.QueryId,
+		)
 	} else {
 		// @TODO remove else here by adding a function to decorate tags
 		// directly with an early return if err != nil. Maybe in cache.go after
