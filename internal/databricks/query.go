@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-	databricksSql "github.com/databricks/databricks-sdk-go/service/sql"
+	databricksSdkSql "github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/model"
 	"github.com/spf13/cast"
@@ -28,8 +27,8 @@ const (
 
 type parameterResolverFunc func(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
-) ([]databricksSql.StatementParameterListItem, error)
+	w DatabricksWorkspace,
+) ([]databricksSdkSql.StatementParameterListItem, error)
 
 type attributeNameAndType struct {
 	attrName		string
@@ -52,7 +51,7 @@ type processRowFunc		func(query *query, attrs map[string]interface{}) error
 
 type DatabricksQueryReceiver struct {
 	id							string
-	w							*databricksSdk.WorkspaceClient
+	w							DatabricksWorkspace
 	warehouseId 				string
 	defaultCatalog				string
 	defaultSchema				string
@@ -62,7 +61,7 @@ type DatabricksQueryReceiver struct {
 
 func NewDatabricksQueryReceiver(
 	id string,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	warehouseId string,
 	defaultCatalog string,
 	defaultSchema string,
@@ -124,7 +123,7 @@ func (d *DatabricksQueryReceiver) PollEvents(
 
 func runQuery(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	warehouseId string,
 	defaultCatalog string,
 	defaultSchema string,
@@ -135,7 +134,7 @@ func runQuery(
 	log.Debugf("running query %s (%s)", query.id, query.title)
 
 	var (
-		params 	[]databricksSql.StatementParameterListItem
+		params 	[]databricksSdkSql.StatementParameterListItem
 		err		error
 	)
 
@@ -146,10 +145,10 @@ func runQuery(
 		}
 	}
 
-	var workspaceInfo *workspaceInfo
+	var workspaceInfo *WorkspaceInfo
 
 	if query.includeWorkspaceInfo {
-		workspaceInfo, err = getWorkspaceInfo(ctx)
+		workspaceInfo, err = GetWorkspaceInfo(ctx)
 		if err != nil {
 			return err
 		}
@@ -188,9 +187,9 @@ func runQuery(
 		attrs["query_title"] = query.title
 
 		if workspaceInfo != nil {
-			attrs["workspace_id"] = workspaceInfo.id
-			attrs["workspace_url"] = workspaceInfo.url
-			attrs["workspace_instance_name"] = workspaceInfo.instanceName
+			attrs["workspace_id"] = workspaceInfo.Id
+			attrs["workspace_url"] = workspaceInfo.Url
+			attrs["workspace_instance_name"] = workspaceInfo.InstanceName
 		}
 
 		for j, col := range row {

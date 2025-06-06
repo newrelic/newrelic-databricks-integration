@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-	databricksSdkPipelines "github.com/databricks/databricks-sdk-go/service/pipelines"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/model"
@@ -18,13 +16,13 @@ const (
 
 type DatabricksPipelineEventsReceiver struct {
 	i							*integration.LabsIntegration
-	w							*databricksSdk.WorkspaceClient
+	w							DatabricksWorkspace
 	tags 						map[string]string
 }
 
 func NewDatabricksPipelineEventsReceiver(
 	i *integration.LabsIntegration,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	tags map[string]string,
 ) *DatabricksPipelineEventsReceiver {
 	return &DatabricksPipelineEventsReceiver{
@@ -44,10 +42,7 @@ func (d *DatabricksPipelineEventsReceiver) PollLogs(
 ) error {
 	lastRun := time.Now().Add(-d.i.Interval * time.Second)
 
-	all := d.w.Pipelines.ListPipelines(
-		ctx,
-		databricksSdkPipelines.ListPipelinesRequest{},
-	)
+	all := d.w.ListPipelines(ctx)
 
 	LOOP:
 
@@ -64,14 +59,10 @@ func (d *DatabricksPipelineEventsReceiver) PollLogs(
 			pipelineStateInfo.State,
 		)
 
-		allEvents := d.w.Pipelines.ListPipelineEvents(
+		allEvents := d.w.ListPipelineEvents(
 			ctx,
-			databricksSdkPipelines.ListPipelineEventsRequest{
-				Filter: "timestamp >= '" +
-					lastRun.UTC().Format(RFC_3339_MILLI_LAYOUT) +
-					"'",
-				PipelineId: pipelineStateInfo.PipelineId,
-			},
+			lastRun,
+			pipelineStateInfo.PipelineId,
 		)
 
 		count := 0

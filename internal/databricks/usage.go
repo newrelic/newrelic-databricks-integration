@@ -9,8 +9,6 @@ import (
 
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-
 	"github.com/newrelic/newrelic-client-go/v2/pkg/region"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/connectors"
@@ -32,7 +30,7 @@ type newRelicNrqlLookupsApiRequest struct {
 
 func NewDatabricksListPricesCollector(
 	li *integration.LabsIntegration,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	warehouseId string,
 ) *integration.SimpleComponent {
 	return integration.NewSimpleComponent(
@@ -136,7 +134,7 @@ func listPricesPostBodyBuilder(rows []map[string]interface{}) connectors.HttpBod
 
 func importBillingListPricesTable(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	warehouseId string,
 	newRelicRegion region.Name,
 	newRelicAccountId int,

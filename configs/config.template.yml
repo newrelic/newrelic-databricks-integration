@@ -54,6 +54,11 @@ databricks:
 spark:
   webUiUrl: http://localhost:4040
   metricPrefix: spark.
+  clusterManager: databricks
+  databricks:
+    includeJobRunTaskRunId: false
+    includePipelineUpdateId: false
+    includePipelineFlowId: false
 tags:
   key1: value
   key2: value

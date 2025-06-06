@@ -4,7 +4,7 @@
   "permissions": "PUBLIC_READ_WRITE",
   "pages": [
     {
-      "name": "Databricks Pipeline Updates",
+      "name": "Pipeline Updates",
       "description": null,
       "widgets": [
         {
@@ -26,7 +26,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'RUNNING'"
               }
@@ -55,7 +55,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'FAILED'"
               }
@@ -84,7 +84,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'IDLE'"
               }
@@ -113,7 +113,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'RUNNING'"
               }
@@ -142,7 +142,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'WAITING_FOR_RESOURCES'"
               }
@@ -171,7 +171,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'SETTING_UP_TABLES'"
               }
@@ -200,7 +200,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'COMPLETED'\nLIMIT MAX"
               }
@@ -229,7 +229,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'FAILED'\nLIMIT MAX"
               }
@@ -258,7 +258,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'CANCELED'\nLIMIT MAX"
               }
@@ -293,7 +293,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineUpdateStatus as Status, getField(databricks.pipeline.update.duration, latest) / 1000 AS Duration\nWHERE databricks.pipeline.update.duration IS NOT NULL\n AND databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nLIMIT MAX "
               }
@@ -333,7 +333,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.update.duration) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
               }
@@ -385,7 +385,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.update.duration.wait) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
               }
@@ -437,7 +437,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.update.runTime) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
               }
@@ -484,7 +484,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowStatus AS Status, getField(databricks.pipeline.flow.duration, latest) / 1000 AS Duration\nWHERE databricks.pipeline.flow.duration IS NOT NULL\n AND databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nLIMIT MAX\n"
               }
@@ -524,7 +524,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
               }
@@ -576,7 +576,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration.queue) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
               }
@@ -628,7 +628,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration.plan) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
               }
@@ -654,7 +654,7 @@
           "title": "Average records written by pipeline and flow",
           "layout": {
             "column": 1,
-            "row": 18,
+            "row": 22,
             "width": 6,
             "height": 3
           },
@@ -669,7 +669,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.rowsWritten)\nFACET databricksPipelineName, databricksPipelineFlowName"
               }
@@ -683,7 +683,7 @@
           "title": "Average records dropped by pipeline and flow",
           "layout": {
             "column": 7,
-            "row": 18,
+            "row": 22,
             "width": 6,
             "height": 3
           },
@@ -698,7 +698,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.recordsDropped)\nFACET databricksPipelineName, databricksPipelineFlowName"
               }
@@ -712,7 +712,7 @@
           "title": "Average backlog bytes by pipeline and flow",
           "layout": {
             "column": 1,
-            "row": 21,
+            "row": 25,
             "width": 6,
             "height": 3
           },
@@ -727,7 +727,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.backlogBytes)\nFACET databricksPipelineName, databricksPipelineFlowName"
               }
@@ -741,7 +741,7 @@
           "title": "Average backlog files by pipeline and flow",
           "layout": {
             "column": 7,
-            "row": 21,
+            "row": 25,
             "width": 6,
             "height": 3
           },
@@ -756,7 +756,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.backlogFiles)\nFACET databricksPipelineName, databricksPipelineFlowName"
               }
@@ -770,7 +770,7 @@
           "title": "Expectation records passed",
           "layout": {
             "column": 1,
-            "row": 24,
+            "row": 28,
             "width": 6,
             "height": 4
           },
@@ -791,7 +791,7 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowExpectationName AS Expectation, getField(databricks.pipeline.flow.expectation.recordsPassed, latest) AS Records\nWHERE databricks.pipeline.flow.expectation.recordsPassed IS NOT NULL\nLIMIT MAX\n "
               }
@@ -805,7 +805,7 @@
           "title": "Expectation records failed",
           "layout": {
             "column": 7,
-            "row": 24,
+            "row": 28,
             "width": 6,
             "height": 4
           },
@@ -826,9 +826,154 @@
             "nrqlQueries": [
               {
                 "accountIds": [
-                  4314894
+                  0
                 ],
                 "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowExpectationName AS Expectation, getField(databricks.pipeline.flow.expectation.recordsFailed, latest) AS Records\nWHERE databricks.pipeline.flow.expectation.recordsFailed IS NOT NULL\nLIMIT MAX\n "
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spark Metrics",
+      "description": null,
+      "widgets": [
+        {
+          "title": "",
+          "layout": {
+            "column": 1,
+            "row": 1,
+            "width": 2,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.markdown"
+          },
+          "rawConfiguration": {
+            "text": "## Important Notes\n* The charts on this page will populate only if the Databricks Integration is able to [map Spark metrics to pipeline data](https://github.com/newrelic/newrelic-databricks-integration?tab=readme-ov-file#mapping-spark-metrics-to-databricks-jobs-and-pipelines) and the [`includePipelineUpdateId`](https://github.com/newrelic/newrelic-databricks-integration?tab=readme-ov-file#spark-databricks-includepipelineupdateid) configuration parameter is set to `true`.\n* Click on the links in the \"Databricks Link\" column to navigate to the associated pipeline update in the Databricks UI."
+          }
+        },
+        {
+          "title": "Spark jobs by pipeline update",
+          "layout": {
+            "column": 3,
+            "row": 1,
+            "width": 10,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [
+              {
+                "name": "Spark Job ID",
+                "precision": 0,
+                "type": "humanized"
+              },
+              {
+                "name": "Duration",
+                "precision": 2,
+                "type": "humanized"
+              }
+            ],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppJobId AS 'Spark Job ID',\n getField(spark.app.job.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.job.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        },
+        {
+          "title": "Spark stages by pipeline update",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "width": 12,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [
+              {
+                "name": "Duration",
+                "precision": 2,
+                "type": "humanized"
+              },
+              {
+                "name": "Spark Job",
+                "precision": 0,
+                "type": "humanized"
+              }
+            ],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppStageName AS 'Spark Stage Name',\n getField(spark.app.stage.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.stage.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        },
+        {
+          "title": "Spark tasks by pipeline update",
+          "layout": {
+            "column": 1,
+            "row": 9,
+            "width": 12,
+            "height": 4
+          },
+          "linkedEntityGuids": null,
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "dataFormatters": [
+              {
+                "name": "Duration",
+                "precision": 2,
+                "type": "humanized"
+              },
+              {
+                "name": "Spark Job",
+                "precision": 0,
+                "type": "humanized"
+              }
+            ],
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppStageName AS 'Spark Stage Name',\n sparkAppTaskId AS 'Spark Task ID',\n getField(spark.app.stage.task.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.stage.task.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
               }
             ],
             "platformOptions": {
