@@ -8,22 +8,50 @@ import (
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 )
 
-type SparkApiClient struct {
-	sparkContextUiUrl		string
-	authenticator			connectors.HttpAuthenticator
+var (
+	// These functions are exposed like this for dependency injection purposes
+	// to enable mocking of the Spark API client and the function for making
+	// HTTP requests.
+	NewSparkApiClient = newSparkApiClient
+	makeRequest       = makeRequestImpl
+)
+
+type SparkApiClient interface {
+	GetApplications(ctx context.Context) ([]SparkApplication, error)
+	GetApplicationExecutors(
+		ctx context.Context,
+		app *SparkApplication,
+	) ([]SparkExecutor, error)
+	GetApplicationJobs(
+		ctx context.Context,
+		app *SparkApplication,
+	) ([]SparkJob, error)
+	GetApplicationStages(
+		ctx context.Context,
+		app *SparkApplication,
+	) ([]SparkStage, error)
+	GetApplicationRDDs(
+		ctx context.Context,
+		app *SparkApplication,
+	) ([]SparkRDD, error)
 }
 
-func NewSparkApiClient(
+type sparkApiClientImpl struct {
+	sparkContextUiUrl string
+	authenticator     connectors.HttpAuthenticator
+}
+
+func newSparkApiClient(
 	sparkContextUiUrl string,
 	authenticator connectors.HttpAuthenticator,
-) *SparkApiClient {
-	return &SparkApiClient{
+) SparkApiClient {
+	return &sparkApiClientImpl{
 		sparkContextUiUrl,
 		authenticator,
 	}
 }
 
-func (s *SparkApiClient) GetApplications(
+func (s *sparkApiClientImpl) GetApplications(
 	ctx context.Context,
 ) ([]SparkApplication, error) {
 	sparkApps := []SparkApplication{}
@@ -33,14 +61,14 @@ func (s *SparkApiClient) GetApplications(
 		s.authenticator,
 		&sparkApps,
 	)
-	if err !=  nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return sparkApps, nil
 }
 
-func (s *SparkApiClient) GetApplicationExecutors(
+func (s *sparkApiClientImpl) GetApplicationExecutors(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkExecutor, error) {
@@ -51,14 +79,14 @@ func (s *SparkApiClient) GetApplicationExecutors(
 		s.authenticator,
 		&executors,
 	)
-	if err !=  nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return executors, nil
 }
 
-func (s *SparkApiClient) GetApplicationJobs(
+func (s *sparkApiClientImpl) GetApplicationJobs(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkJob, error) {
@@ -69,14 +97,14 @@ func (s *SparkApiClient) GetApplicationJobs(
 		s.authenticator,
 		&jobs,
 	)
-	if err !=  nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return jobs, nil
 }
 
-func (s *SparkApiClient) GetApplicationStages(
+func (s *sparkApiClientImpl) GetApplicationStages(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkStage, error) {
@@ -94,7 +122,7 @@ func (s *SparkApiClient) GetApplicationStages(
 	return stages, nil
 }
 
-func (s *SparkApiClient) GetApplicationRDDs(
+func (s *sparkApiClientImpl) GetApplicationRDDs(
 	ctx context.Context,
 	app *SparkApplication,
 ) ([]SparkRDD, error) {
@@ -105,14 +133,14 @@ func (s *SparkApiClient) GetApplicationRDDs(
 		s.authenticator,
 		&rdds,
 	)
-	if err !=  nil {
+	if err != nil {
 		return nil, err
 	}
 
 	return rdds, nil
 }
 
-func makeRequest(
+func makeRequestImpl(
 	url string,
 	authenticator connectors.HttpAuthenticator,
 	response interface{},
@@ -123,7 +151,7 @@ func makeRequest(
 		connector.SetAuthenticator(authenticator)
 	}
 
-	connector.SetHeaders(map[string]string {
+	connector.SetHeaders(map[string]string{
 		"Content-Type": "application/json",
 		"Accept": "application/json",
 		"User-Agent": connectors.GetUserAgent(),

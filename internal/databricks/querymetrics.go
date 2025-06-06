@@ -2,10 +2,8 @@ package databricks
 
 import (
 	"context"
-	"net/url"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkSql "github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
@@ -21,7 +19,7 @@ const (
 
 type DatabricksQueryMetricsReceiver struct {
 	i							*integration.LabsIntegration
-	w							*databricksSdk.WorkspaceClient
+	w							DatabricksWorkspace
 	startOffset					time.Duration
 	intervalOffset				time.Duration
 	maxResults					int
@@ -32,7 +30,7 @@ type DatabricksQueryMetricsReceiver struct {
 
 func NewDatabricksQueryMetricsReceiver(
 	i *integration.LabsIntegration,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	startOffset time.Duration,
 	intervalOffset time.Duration,
 	maxResults int,
@@ -110,31 +108,18 @@ func (d *DatabricksQueryMetricsReceiver) PollEvents(
 	endTimeMs := now.Add(-d.intervalOffset).UnixMilli()
 
 	for ;!done; {
-		request := databricksSdkSql.ListQueryHistoryRequest{
-			MaxResults: d.maxResults,
-			IncludeMetrics: true,
-		}
-
-		if nextPageToken != "" {
-			// It's unclear if the time range needs to be added when using
-			// the page token. However, it doesn't seem like it would be
-			// necessary so we'll leave it out for now.
-			request.PageToken = url.QueryEscape(nextPageToken)
-		} else {
-			request.FilterBy = &databricksSdkSql.QueryFilter{
-				QueryStartTimeRange: &databricksSdkSql.TimeRange{
-					StartTimeMs: startTimeMs,
-					EndTimeMs: endTimeMs,
-				},
-			}
-		}
-
-		response, err := d.w.QueryHistory.List(ctx, request)
+		queries, hasNpt, npt, err := d.w.ListQueries(
+			ctx,
+			d.maxResults,
+			startTimeMs,
+			endTimeMs,
+			nextPageToken,
+		)
 		if err != nil {
 			return err
 		}
 
-		for _, query := range response.Res {
+		for _, query := range queries {
 			// Note that the values passed for startWindow (effectiveLastRunMs)
 			// and endWindow (endTimeMs) will evaluate to the same thing (or
 			// within milliseconds) on the first run it is very unlikely for
@@ -150,8 +135,8 @@ func (d *DatabricksQueryMetricsReceiver) PollEvents(
 			)
 		}
 
-		if response.HasNextPage {
-			nextPageToken = response.NextPageToken
+		if hasNpt {
+			nextPageToken = npt
 		} else {
 			done = true
 		}
@@ -274,7 +259,7 @@ func makeQueryEventAttrs(
 		}
 	}
 
-	workspaceInfo, err := getWorkspaceInfo(ctx)
+	workspaceInfo, err := GetWorkspaceInfo(ctx)
 	if err != nil {
 		log.Warnf(
 			"could not resolve workspace info while processing result for query %s: %s",
@@ -285,9 +270,9 @@ func makeQueryEventAttrs(
 		// @TODO remove else here by adding a function to decorate tags
 		// directly with an early return if err != nil. Maybe in cache.go after
 		// it is refactored?
-		attrs["workspaceId"] = workspaceInfo.id
-		attrs["workspaceName"] = workspaceInfo.instanceName
-		attrs["workspaceUrl"] = workspaceInfo.url
+		attrs["workspaceId"] = workspaceInfo.Id
+		attrs["workspaceName"] = workspaceInfo.InstanceName
+		attrs["workspaceUrl"] = workspaceInfo.Url
 	}
 
 	attrs["duration"] = query.Duration

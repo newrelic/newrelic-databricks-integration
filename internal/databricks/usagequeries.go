@@ -5,8 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-	databricksSql "github.com/databricks/databricks-sdk-go/service/sql"
+	databricksSdkSql "github.com/databricks/databricks-sdk-go/service/sql"
 )
 
 const (
@@ -20,14 +19,14 @@ const (
 
 func workspaceIdParameterResolver(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
-) ([]databricksSql.StatementParameterListItem, error) {
-	workspaceId, err := w.CurrentWorkspaceID(ctx)
+	w DatabricksWorkspace,
+) ([]databricksSdkSql.StatementParameterListItem, error) {
+	workspaceId, err := w.GetCurrentWorkspaceId(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return []databricksSql.StatementParameterListItem{
+	return []databricksSdkSql.StatementParameterListItem{
 		{
 			Name: "workspace_id",
 			Value: strconv.FormatInt(workspaceId, 10),

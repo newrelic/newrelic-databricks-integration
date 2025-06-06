@@ -12,29 +12,116 @@ import (
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/model"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/pipeline"
+	"github.com/spf13/viper"
 )
 
-type SparkMetricsReceiver struct {
-	i 					*integration.LabsIntegration
-	client 				*SparkApiClient
-	metricPrefix		string
-	tags				map[string]string
+type ClusterManagerType string
+
+const (
+	ClusterManagerTypeStandalone ClusterManagerType = "standalone"
+	ClusterManagerTypeDatabricks ClusterManagerType = "databricks"
+)
+
+var (
+	// NewSparkMetricsReceiver is exposed like this for dependency injection
+	// purposes to enable mocking of the receiver in tests.
+	NewSparkMetricsReceiver = newSparkMetricsReceiver
+)
+
+func getClusterManager() (ClusterManagerType, error) {
+	// Set the default cluster manager to standalone
+	viper.SetDefault(
+		"spark.clusterManager",
+		string(ClusterManagerTypeStandalone),
+	)
+
+	// Get the cluster manager type from the config
+	clusterManagerType := ClusterManagerType(
+		strings.ToLower(viper.GetString("spark.clusterManager")),
+	)
+
+	switch clusterManagerType {
+	case ClusterManagerTypeStandalone, ClusterManagerTypeDatabricks:
+		return clusterManagerType, nil
+	default:
+		return "", errors.New("invalid clusterManager type")
+	}
 }
 
-func NewSparkMetricsReceiver(
+type jobCounters struct {
+	running   int64
+	unknown   int64
+	succeeded int64
+	failed    int64
+}
+
+type stageCounters struct {
+	active   int64
+	pending  int64
+	complete int64
+	failed   int64
+	skipped  int64
+}
+
+type SparkMetricDecorator interface {
+	DecorateExecutor(
+		sparkExecutor *SparkExecutor,
+		attrs map[string]interface{},
+	)
+	DecorateJob(sparkJob *SparkJob, attrs map[string]interface{})
+	DecorateStage(sparkStage *SparkStage, attrs map[string]interface{})
+	DecorateTask(
+		sparkStage *SparkStage,
+		sparkTask *SparkTask,
+		attrs map[string]interface{},
+	)
+	DecorateRDD(sparkRDD *SparkRDD, attrs map[string]interface{})
+	DecorateMetric(attrs map[string]interface{})
+}
+
+type SparkMetricsReceiver struct {
+	i               *integration.LabsIntegration
+	client          SparkApiClient
+	metricPrefix    string
+	clusterManager  ClusterManagerType
+	metricDecorator SparkMetricDecorator
+	tags            map[string]string
+}
+
+func newSparkMetricsReceiver(
+	ctx context.Context,
 	i *integration.LabsIntegration,
-	client *SparkApiClient,
+	client SparkApiClient,
 	metricPrefix string,
 	tags map[string]string,
-) pipeline.MetricsReceiver {
+) (pipeline.MetricsReceiver, error) {
+	clusterManager, err := getClusterManager()
+	if err != nil {
+		return nil, err
+	}
+
+	var metricDecorator SparkMetricDecorator
+
+	switch clusterManager {
+	case ClusterManagerTypeDatabricks:
+		log.Debugf("using Databricks metric decorator")
+
+		metricDecorator, err = NewDatabricksMetricDecorator(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	r := &SparkMetricsReceiver{
 		i,
 		client,
 		metricPrefix,
+		clusterManager,
+		metricDecorator,
 		tags,
 	}
 
-	return r
+	return r, nil
 }
 
 func (s *SparkMetricsReceiver) GetId() string {
@@ -43,7 +130,7 @@ func (s *SparkMetricsReceiver) GetId() string {
 
 func (s *SparkMetricsReceiver) PollMetrics(
 	ctx context.Context,
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) error {
 	sparkApps, err := s.client.GetApplications(ctx)
 	if err != nil {
@@ -63,6 +150,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				s.client,
 				app,
 				s.metricPrefix,
+				s.metricDecorator,
 				s.tags,
 				writer,
 			)
@@ -75,6 +163,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				s.client,
 				app,
 				s.metricPrefix,
+				s.metricDecorator,
 				s.tags,
 				writer,
 			)
@@ -87,6 +176,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				s.client,
 				app,
 				s.metricPrefix,
+				s.metricDecorator,
 				s.tags,
 				writer,
 			)
@@ -99,6 +189,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				s.client,
 				app,
 				s.metricPrefix,
+				s.metricDecorator,
 				s.tags,
 				writer,
 			)
@@ -115,14 +206,15 @@ func (s *SparkMetricsReceiver) PollMetrics(
 
 func collectSparkAppExecutorMetrics(
 	ctx context.Context,
-	client *SparkApiClient,
+	client SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
+	metricDecorator SparkMetricDecorator,
 	tags map[string]string,
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) error {
 	executors, err := client.GetApplicationExecutors(ctx, sparkApp)
-	if err !=  nil {
+	if err != nil {
 		return err
 	}
 
@@ -135,6 +227,10 @@ func collectSparkAppExecutorMetrics(
 		)
 
 		attrs["sparkAppExecutorId"] = executor.Id
+
+		if metricDecorator != nil {
+			metricDecorator.DecorateExecutor(&executor, attrs)
+		}
 
 		writeGauge(
 			metricPrefix,
@@ -274,23 +370,35 @@ func collectSparkAppExecutorMetrics(
 	return nil
 }
 
+func updateJobCounters(job *SparkJob, jobCounters *jobCounters) {
+	jobStatus := strings.ToLower(job.Status)
+
+	if jobStatus == "running" {
+		jobCounters.running += 1
+	} else if jobStatus == "unknown" {
+		jobCounters.unknown += 1
+	} else if jobStatus == "succeeded" {
+		jobCounters.succeeded += 1
+	} else if jobStatus == "failed" {
+		jobCounters.failed += 1
+	}
+}
+
 func collectSparkAppJobMetrics(
 	ctx context.Context,
-	client *SparkApiClient,
+	client SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
+	metricDecorator SparkMetricDecorator,
 	tags map[string]string,
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) error {
 	jobs, err := client.GetApplicationJobs(ctx, sparkApp)
-	if err !=  nil {
+	if err != nil {
 		return err
 	}
 
-	jobsRunning := 0
-	jobsLost := 0
-	jobsSucceeded := 0
-	jobsFailed := 0
+	jobCounters := jobCounters{}
 
 	for _, job := range jobs {
 		log.Debugf("processing job %d (%s)", job.JobId, job.Name)
@@ -307,16 +415,10 @@ func collectSparkAppJobMetrics(
 		//attrs["sparkAppJobGroup"] = job.JobGroup
 		attrs["sparkAppJobStatus"] = job.Status
 
-		jobStatus := strings.ToLower(job.Status)
+		updateJobCounters(&job, &jobCounters)
 
-		if jobStatus == "running" {
-			jobsRunning += 1
-		} else if jobStatus == "unknown" {
-			jobsLost += 1
-		} else if jobStatus == "succeeded" {
-			jobsSucceeded += 1
-		} else if jobStatus == "failed" {
-			jobsFailed += 1
+		if metricDecorator != nil {
+			metricDecorator.DecorateJob(&job, attrs)
 		}
 
 		// Write all the things.
@@ -449,12 +551,16 @@ func collectSparkAppJobMetrics(
 		tags,
 	)
 
+	if metricDecorator != nil {
+		metricDecorator.DecorateMetric(attrs)
+	}
+
 	attrs["sparkAppJobStatus"] = "running"
 
 	writeGauge(
 		metricPrefix,
 		"app.jobs",
-		jobsRunning,
+		jobCounters.running,
 		attrs,
 		writer,
 	)
@@ -464,7 +570,7 @@ func collectSparkAppJobMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.jobs",
-		jobsLost,
+		jobCounters.unknown,
 		attrs,
 		writer,
 	)
@@ -474,7 +580,7 @@ func collectSparkAppJobMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.jobs",
-		jobsSucceeded,
+		jobCounters.succeeded,
 		attrs,
 		writer,
 	)
@@ -484,7 +590,7 @@ func collectSparkAppJobMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.jobs",
-		jobsFailed,
+		jobCounters.failed,
 		attrs,
 		writer,
 	)
@@ -492,24 +598,37 @@ func collectSparkAppJobMetrics(
 	return nil
 }
 
+func updateStageCounters(stage *SparkStage, stageCounters *stageCounters) {
+	stageStatus := strings.ToLower(stage.Status)
+
+	if stageStatus == "active" {
+		stageCounters.active += 1
+	} else if stageStatus == "pending" {
+		stageCounters.pending += 1
+	} else if stageStatus == "complete" {
+		stageCounters.complete += 1
+	} else if stageStatus == "failed" {
+		stageCounters.failed += 1
+	} else if stageStatus == "skipped" {
+		stageCounters.skipped += 1
+	}
+}
+
 func collectSparkAppStageMetrics(
 	ctx context.Context,
-	client *SparkApiClient,
+	client SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
+	metricDecorator SparkMetricDecorator,
 	tags map[string]string,
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) error {
 	stages, err := client.GetApplicationStages(ctx, sparkApp)
 	if err != nil {
 		return err
 	}
 
-	stagesActive := 0
-	stagesPending := 0
-	stagesComplete := 0
-	stagesFailed := 0
-	stagesSkipped := 0
+	stageCounters := stageCounters{}
 
 	for _, stage := range stages {
 		log.Debugf("processing stage %d (%s)", stage.StageId, stage.Name)
@@ -530,16 +649,10 @@ func collectSparkAppStageMetrics(
 		//attrs["sparkAppStageSchedulingPool"] = stage.SchedulingPool
 		//attrs["sparkAppStageResourceProfileId"] = stage.ResourceProfileId
 
-		if stageStatus == "active" {
-			stagesActive += 1
-		} else if stageStatus == "pending" {
-			stagesPending += 1
-		} else if stageStatus == "complete" {
-			stagesComplete += 1
-		} else if stageStatus == "failed" {
-			stagesFailed += 1
-		} else if stageStatus == "skipped" {
-			stagesSkipped += 1
+		updateStageCounters(&stage, &stageCounters)
+
+		if metricDecorator != nil {
+			metricDecorator.DecorateStage(&stage, attrs)
 		}
 
 		// Write all the things.
@@ -848,6 +961,8 @@ func collectSparkAppStageMetrics(
 		for _, task := range stage.Tasks {
 			writeStageTaskMetrics(
 				metricPrefix + "app.stage.task.",
+				metricDecorator,
+				&stage,
 				&task,
 				attrs,
 				writer,
@@ -925,12 +1040,16 @@ func collectSparkAppStageMetrics(
 		tags,
 	)
 
+	if metricDecorator != nil {
+		metricDecorator.DecorateMetric(attrs)
+	}
+
 	attrs["sparkAppStageStatus"] = "active"
 
 	writeGauge(
 		metricPrefix,
 		"app.stages",
-		stagesActive,
+		stageCounters.active,
 		attrs,
 		writer,
 	)
@@ -940,7 +1059,7 @@ func collectSparkAppStageMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.stages",
-		stagesPending,
+		stageCounters.pending,
 		attrs,
 		writer,
 	)
@@ -950,7 +1069,7 @@ func collectSparkAppStageMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.stages",
-		stagesComplete,
+		stageCounters.complete,
 		attrs,
 		writer,
 	)
@@ -960,7 +1079,7 @@ func collectSparkAppStageMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.stages",
-		stagesFailed,
+		stageCounters.failed,
 		attrs,
 		writer,
 	)
@@ -970,7 +1089,7 @@ func collectSparkAppStageMetrics(
 	writeGauge(
 		metricPrefix,
 		"app.stages",
-		stagesSkipped,
+		stageCounters.skipped,
 		attrs,
 		writer,
 	)
@@ -980,9 +1099,11 @@ func collectSparkAppStageMetrics(
 
 func writeStageTaskMetrics(
 	metricPrefix string,
+	metricDecorator SparkMetricDecorator,
+	stage *SparkStage,
 	task *SparkTask,
 	attrs map[string]interface{},
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) {
 	log.Debugf("processing task %d", task.TaskId)
 
@@ -999,6 +1120,10 @@ func writeStageTaskMetrics(
 	taskMetricAttrs["sparkAppTaskId"] = task.TaskId
 	taskMetricAttrs["sparkAppTaskAttempt"] = task.Attempt
 	//attrs["sparkAppTaskPartitionId"] = task.PartitionId
+
+	if metricDecorator != nil {
+		metricDecorator.DecorateTask(stage, task, taskMetricAttrs)
+	}
 
 	writeGauge(
 		metricPrefix,
@@ -1287,14 +1412,15 @@ func writeStageTaskMetrics(
 
 func collectSparkAppRDDMetrics(
 	ctx context.Context,
-	client *SparkApiClient,
+	client SparkApiClient,
 	sparkApp *SparkApplication,
 	metricPrefix string,
+	metricDecorator SparkMetricDecorator,
 	tags map[string]string,
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) error {
 	rdds, err := client.GetApplicationRDDs(ctx, sparkApp)
-	if err !=  nil {
+	if err != nil {
 		return err
 	}
 
@@ -1308,6 +1434,10 @@ func collectSparkAppRDDMetrics(
 
 		attrs["sparkAppRDDId"] = rdd.Id
 		attrs["sparkAppRDDName"] = rdd.Name
+
+		if metricDecorator != nil {
+			metricDecorator.DecorateRDD(&rdd, attrs)
+		}
 
 		writeGauge(
 			metricPrefix,
@@ -1345,49 +1475,49 @@ func collectSparkAppRDDMetrics(
 
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.used" ,
+				"app.storage.rdd.distribution.memory.used",
 				distribution.MemoryUsed,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.remaining" ,
+				"app.storage.rdd.distribution.memory.remaining",
 				distribution.MemoryRemaining,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.disk.used" ,
+				"app.storage.rdd.distribution.disk.used",
 				distribution.DiskUsed,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.usedOnHeap" ,
+				"app.storage.rdd.distribution.memory.usedOnHeap",
 				distribution.OnHeapMemoryUsed,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.usedOffHeap" ,
+				"app.storage.rdd.distribution.memory.usedOffHeap",
 				distribution.OffHeapMemoryUsed,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.remainingOnHeap" ,
+				"app.storage.rdd.distribution.memory.remainingOnHeap",
 				distribution.OnHeapMemoryRemaining,
 				rddDistributionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.distribution.memory.remainingOffHeap" ,
+				"app.storage.rdd.distribution.memory.remainingOffHeap",
 				distribution.OffHeapMemoryRemaining,
 				rddDistributionAttrs,
 				writer,
@@ -1402,14 +1532,14 @@ func collectSparkAppRDDMetrics(
 
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.partition.memory.used" ,
+				"app.storage.rdd.partition.memory.used",
 				partition.MemoryUsed,
 				rddPartitionAttrs,
 				writer,
 			)
 			writeGauge(
 				metricPrefix,
-				"app.storage.rdd.partition.disk.used" ,
+				"app.storage.rdd.partition.disk.used",
 				partition.DiskUsed,
 				rddPartitionAttrs,
 				writer,
@@ -1424,7 +1554,7 @@ func writeMemoryMetrics(
 	metricPrefix string,
 	memoryMetrics *SparkExecutorMemoryMetrics,
 	attrs map[string]interface{},
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) {
 	writeGauge(
 		metricPrefix,
@@ -1463,7 +1593,7 @@ func writePeakMemoryMetrics(
 	metricPrefix string,
 	peakMemoryMetrics *SparkExecutorPeakMemoryMetrics,
 	attrs map[string]interface{},
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) {
 	writeGauge(
 		metricPrefix,
@@ -1647,7 +1777,7 @@ func writeGauge(
 	metricName string,
 	metricValue any,
 	attrs map[string]interface{},
-	writer chan <- model.Metric,
+	writer chan<- model.Metric,
 ) {
 	metric := model.NewGaugeMetric(
 		prefix + metricName,

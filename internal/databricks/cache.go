@@ -7,9 +7,6 @@ import (
 	"sync"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-	databricksSdkCompute "github.com/databricks/databricks-sdk-go/service/compute"
-	databricksSql "github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 )
 
@@ -23,10 +20,10 @@ type memoryCache[T interface{}] struct {
 	loader			cacheLoaderFunc[T]
 }
 
-type workspaceInfo struct {
-	id				int64
-	url				string
-	instanceName	string
+type WorkspaceInfo struct {
+	Id				int64
+	Url				string
+	InstanceName	string
 }
 
 type clusterInfo struct {
@@ -43,9 +40,12 @@ type warehouseInfo struct {
 }
 
 var (
-	workspaceInfoCache			*memoryCache[*workspaceInfo]
+	workspaceInfoCache			*memoryCache[*WorkspaceInfo]
 	clusterInfoCache			*memoryCache[map[string]*clusterInfo]
 	warehouseInfoCache			*memoryCache[map[string]*warehouseInfo]
+    // GetWorkspaceInfo is exposed like this for dependency injection purposes
+	// to enable mocking of the function in tests.
+    GetWorkspaceInfo = getWorkspaceInfo
 )
 
 func newMemoryCache[T interface{}](
@@ -90,13 +90,13 @@ func (m *memoryCache[T]) invalidate() {
 // This function is not thread-safe and should not be called concurrently.
 // For now it is only called from databricks.go in the function InitPipelines()
 // so it is safe to assume that it will not be called concurrently.
-func initInfoByIdCaches(
-	w *databricksSdk.WorkspaceClient,
+func InitInfoByIdCaches(
+	w DatabricksWorkspace,
 ) {
 	if workspaceInfoCache == nil {
 		workspaceInfoCache = newMemoryCache(
 			5 * time.Minute,
-			func(ctx context.Context) (**workspaceInfo, error) {
+			func(ctx context.Context) (**WorkspaceInfo, error) {
 				workspaceInfo, err := buildWorkspaceInfo(ctx, w)
 				if err != nil {
 					return nil, err
@@ -138,20 +138,22 @@ func initInfoByIdCaches(
 
 func buildWorkspaceInfo(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
-) (*workspaceInfo, error) {
+	w DatabricksWorkspace,
+) (*WorkspaceInfo, error) {
 	log.Debugf("building workspace info...")
 
-	workspaceId, err := w.CurrentWorkspaceID(ctx)
+	workspaceId, err := w.GetCurrentWorkspaceId(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	url, err := url.Parse(w.Config.Host)
+	host := w.GetConfig().Host
+
+	url, err := url.Parse(host)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"could not parse workspace URL %s: %v",
-			w.Config.Host,
+			host,
 			err,
 		)
 	}
@@ -166,14 +168,14 @@ func buildWorkspaceInfo(
 		hostname,
 	)
 
-	return &workspaceInfo{
+	return &WorkspaceInfo{
 		workspaceId,
 		urlStr,
 		hostname,
 	}, nil
 }
 
-func getWorkspaceInfo(ctx context.Context) (*workspaceInfo, error) {
+func getWorkspaceInfo(ctx context.Context) (*WorkspaceInfo, error) {
 	wi, err := workspaceInfoCache.get(ctx)
 	if err != nil {
 		return nil, err
@@ -184,18 +186,15 @@ func getWorkspaceInfo(ctx context.Context) (*workspaceInfo, error) {
 
 func buildClusterInfoByIdMap(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 ) (map[string]*clusterInfo, error) {
 	log.Debugf("building cluster info by ID map...")
 
 	m := map[string]*clusterInfo{}
 
-	log.Debugf("listing clusters for workspace host %s", w.Config.Host)
+	log.Debugf("listing clusters for workspace host %s", w.GetConfig().Host)
 
-	all := w.Clusters.List(
-		ctx,
-		databricksSdkCompute.ListClustersRequest{ PageSize: 100 },
-	)
+	all := w.ListClusters(ctx)
 
 	for ; all.HasNext(ctx);  {
 		c, err := all.Next(ctx)
@@ -241,18 +240,15 @@ func getClusterInfoById(
 
 func buildWarehouseInfoByIdMap(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 ) (map[string]*warehouseInfo, error) {
 	log.Debugf("building warehouse info by ID map...")
 
 	m := map[string]*warehouseInfo{}
 
-	log.Debugf("listing warehouses for workspace host %s", w.Config.Host)
+	log.Debugf("listing warehouses for workspace host %s", w.GetConfig().Host)
 
-	all := w.Warehouses.List(
-		ctx,
-		databricksSql.ListWarehousesRequest{},
-	)
+	all := w.ListWarehouses(ctx)
 
 	for ; all.HasNext(ctx); {
 		warehouse, err := all.Next(ctx)

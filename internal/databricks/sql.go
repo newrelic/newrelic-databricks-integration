@@ -6,8 +6,7 @@ import (
 	"sync"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
-	databricksSql "github.com/databricks/databricks-sdk-go/service/sql"
+	databricksSdkSql "github.com/databricks/databricks-sdk-go/service/sql"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/spf13/viper"
 )
@@ -18,22 +17,13 @@ const (
 
 func executeStatementOnWarehouse(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	warehouseId string,
 	defaultCatalog string,
 	defaultSchema string,
 	stmt string,
-	params []databricksSql.StatementParameterListItem,
+	params []databricksSdkSql.StatementParameterListItem,
 ) ([][]string, error) {
-	req := databricksSql.ExecuteStatementRequest{
-		WarehouseId: warehouseId,
-		Catalog: defaultCatalog,
-		Schema: defaultSchema,
-		Statement: stmt,
-		WaitTimeout: "0s",
-		Parameters: params,
-	}
-
 	log.Debugf(
 		"executing statement %s for catalog %s and schema %s",
 		stmt,
@@ -41,13 +31,20 @@ func executeStatementOnWarehouse(
 		defaultSchema,
 	)
 
-	execResp, err := w.StatementExecution.ExecuteStatement(ctx, req)
+	execResp, err := w.ExecuteStatement(
+		ctx,
+        warehouseId,
+        defaultCatalog,
+        defaultSchema,
+        stmt,
+        params,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	if execResp.Status != nil &&
-		execResp.Status.State == databricksSql.StatementStateFailed {
+		execResp.Status.State == databricksSdkSql.StatementStateFailed {
 		return nil, fmt.Errorf(execResp.Status.Error.Message)
 	}
 
@@ -79,7 +76,7 @@ func executeStatementOnWarehouse(
 
 func pollStatement(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	statementId string,
 ) ([][]string, error) {
 	sqlStatementTimeout := viper.GetInt("databricks.sqlStatementTimeout")
@@ -139,7 +136,7 @@ func pollStatement(
 
 			// get the next chunk of results
 			log.Debugf("getting chunk %d", chunkIndex)
-			resultData, err := w.StatementExecution.GetStatementResultChunkNByStatementIdAndChunkIndex(
+			resultData, err := w.GetStatementResultChunkNByStatementIdAndChunkIndex(
 				ctx,
 				statementId,
 				chunkIndex,
@@ -159,21 +156,17 @@ func pollStatement(
 			// additional chunks to retrieve, keep waiting
 
 		case <- timer.C:
-			w.StatementExecution.CancelExecution(
+			w.CancelExecution(
 				ctx,
-				databricksSql.CancelExecutionRequest{
-					StatementId: statementId,
-				},
+				statementId,
 			)
 
 			return nil,
 				fmt.Errorf("sql result data not received in timely manner")
 		case <- ctx.Done():
-			w.StatementExecution.CancelExecution(
+			w.CancelExecution(
 				ctx,
-				databricksSql.CancelExecutionRequest{
-					StatementId: statementId,
-				},
+				statementId,
 			)
 
 			return nil,
@@ -184,13 +177,13 @@ func pollStatement(
 
 func getStatementStatus(
 	ctx context.Context,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	statementId string,
 
 ) ([][]string, int, bool, error) {
 	log.Debugf("polling statement status for statement %s", statementId)
 
-	getResp, err := w.StatementExecution.GetStatementByStatementId(
+	getResp, err := w.GetStatementByStatementId(
 		ctx,
 		statementId,
 	)
@@ -206,19 +199,19 @@ func getStatementStatus(
 
 	status := getResp.Status.State
 
-	if status == databricksSql.StatementStatePending ||
-		status == databricksSql.StatementStateRunning {
+	if status == databricksSdkSql.StatementStatePending ||
+		status == databricksSdkSql.StatementStateRunning {
 		// statement is not done yet
 		return nil, 0, false, nil
 	}
 
-	if status == databricksSql.StatementStateFailed {
+	if status == databricksSdkSql.StatementStateFailed {
 		// sql statement execution failed
 		return nil, 0, false, fmt.Errorf(getResp.Status.Error.Message)
 	}
 
-	if status == databricksSql.StatementStateCanceled ||
-		status == databricksSql.StatementStateClosed {
+	if status == databricksSdkSql.StatementStateCanceled ||
+		status == databricksSdkSql.StatementStateClosed {
 		// sql statement cancelled by Databricks, a user, or another process, or
 		// statement succeeded, was closed, and result can no longer be
 		// retrieved (shouldn't happen in our case)

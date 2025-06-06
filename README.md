@@ -1062,9 +1062,112 @@ metric representing the value of the memory used on application executors
 (`app.executor.memoryUsed`) will be `spark.app.executor.memoryUsed`.
 
 Note that it is not recommended to leave this value empty as the metric names
-without a prefix may be ambiguous. Additionally, note that this parameter has no
-effect on Spark telemetry collected by the Databricks collector. In that case,
-use the [`sparkMetricPrefix`](#sparkmetricprefix) instead.
+without a prefix may be ambiguous.
+
+###### `clusterManager`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The cluster manager on which the Spark engine is running. | string | N | `standalone` |
+
+This parameter specifies an identifier that indicates the cluster manager on
+which the Spark engine is running.
+
+The valid values for this parameter are `standalone` and `databricks`. When
+this parameter is set to `databricks`, metrics are decorated with additional
+attributes (such as the workspace ID, name, and URL). Additional parameters that
+apply to Databricks can be specified using the Spark [`databricks`](#spark-databricks)
+configuration. When this parameter is not set, or is set to `standalone`, no
+additional telemetry or attributes are collected. The default value for this
+parameter is `standalone`.
+
+###### Spark `databricks`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The root node for the set of Spark [Databricks configuration](#spark-databricks-configuration) parameters | YAML Mapping | N | N/a |
+
+This element groups together the configuration parameters to [configure](#spark-databricks-configuration)
+the Databricks specific settings when the Spark collector is collecting
+telemetry from Spark running on Databricks.
+
+##### Spark `databricks` configuration
+
+The Spark Databricks configuration parameters are used to [configure](#spark-databricks-configuration)
+the Databricks specific settings when the Spark collector is collecting
+telemetry from Spark running on Databricks.
+
+###### Spark Databricks `includeJobRunTaskRunId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable inclusion of the task run ID in the `databricksJobRunTaskRunId` attribute for Spark job, stage, and task metrics associated with Databricks job runs | `true` / `false` | N | `false` |
+
+By default, the Spark collector will not include task run IDs on any of the
+Spark job, stage, and task metrics associated with Databricks job runs in order
+to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
+due to the fact that task run IDs have high cardinality because they are unique
+across all job task runs.
+
+This flag can be used to enable the inclusion of the task run ID in the
+`databricksJobRunTaskRunId` attribute on all Spark job, stage, and task metrics
+associated with Databricks job runs.
+
+When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
+and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
+in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
+to provide updates on limits changes.
+
+See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
+for more details.
+
+###### Spark Databricks `includePipelineUpdateId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable inclusion of the pipeline update ID in the `databricksPipelineUpdateId` attribute for Spark job, stage, and task metrics associated with Databricks pipeline updates | `true` / `false` | N | `false` |
+
+By default, the Spark collector will not include pipeline update IDs on any of
+the Spark job, stage, and task metrics associated with Databricks pipeline
+updates in order to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
+due to the fact that pipeline update IDs have high cardinality because they are
+unique across all pipeline updates.
+
+This flag can be used to enable the inclusion of the pipeline update ID in the
+`databricksPipelineUpdateId` attribute on all Spark job, stage, and task metrics
+associated with Databricks pipeline updates.
+
+When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
+and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
+in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
+to provide updates on limits changes.
+
+See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
+for more details.
+
+###### Spark Databricks `includePipelineFlowId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable inclusion of the pipeline flow ID in the `databricksPipelineFlowId` attribute for Spark job, stage, and task metrics associated with Databricks pipeline update flows | `true` / `false` | N | `false` |
+
+By default, the Spark collector will not include pipeline update flow IDs on any
+of the Spark job, stage, and task metrics associated with Databricks pipeline
+update flows in order to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
+due to the fact that pipeline update flow IDs have high cardinality because they
+unique across all pipeline updates.
+
+This flag can be used to enable the inclusion of the pipeline update flow ID in
+the `databricksPipelineFlowId` attribute on all Spark job, stage, and task
+metrics associated with Databricks pipeline update flows.
+
+When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
+and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
+in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
+to provide updates on limits changes.
+
+See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
+for more details.
 
 ### Authentication
 
@@ -1580,6 +1683,60 @@ counter metrics.
 In general, only the [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
 aggregator function should be used when visualizing or alerting using these
 counters.
+
+##### Mapping Spark metrics to Databricks Jobs and Pipelines
+
+When the Databricks Integration is deployed on the [driver node of a Databricks cluster](#deploy-the-integration-on-the-driver-node-of-a-databricks-cluster),
+all Spark metrics collected from Spark running on Databricks compute will have
+the following attributes.
+
+| Name                     | Data Type | Data Description                                                                                                                                |
+| ------------------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `databricksWorspaceId`   | string    | The Databricks workspace [ID](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids)            |
+| `databricksWorspaceName` | string    | The Databricks workspace [instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) |
+| `databricksWorspaceUrl`  | string    | The Databricks workspace [URL](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids)           |
+
+Additionally, the integration will attempt to map Spark job, stage, and task
+metrics to either a Databricks Job task run or a Databricks Pipeline (and in
+some cases a specific update flow). This is done by examining the `jobGroup`
+field that is returned for Spark jobs on the [Spark ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api).
+
+By default, the value of the `jobGroup` field is a string with a specific
+format that includes the Databricks job ID and task run ID for Spark job, stage,
+and task metrics associated with a Databricks job run, and includes the
+Databricks pipeline ID (and in some cases the pipeline update ID and pipeline
+update flow ID) for Spark job, stage, and task metrics associated with a
+Databricks pipeline update.
+
+When collecting Spark job, stage, and task metrics, the Databricks integration
+will examine the value of the `jobGroup` field. If the value follows one of the
+recognized formats, the integration will parse the IDs out of the field and
+include the IDs as attributes on each Spark job, stage, and task metric as
+follows.
+
+* For Spark job, stage, and task metrics associated with a Databricks job task
+  run, the following attributes are added.
+
+  | Name                        | Data Type | Description                                                                                                                                                    |
+  | --------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `databricksJobId`           | number    | The job ID for the associated Databricks job run                                                                                                               |
+  | `databricksJobRunTaskRunId` | number    | The task run ID for the associated Databricks job run (only included if [`includeJobRunTaskRunId`](#spark-databricks-includejobruntaskrunid) is set to `true`) |
+
+* For Spark job, stage, and task metrics associated with a Databricks pipeline
+  update, the following attributes are added.
+
+  | Name                         | Data Type | Description                                                                                                                                                                                                                                                         |
+  | ---------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `databricksPipelineId`       | string    | The pipeline ID for the associated Databricks pipeline                                                                                                                                                                                                              |
+  | `databricksPipelineUpdateId` | string    | The pipeline update ID for the associated Databricks pipeline update (only included if the pipeline update ID is present in the `jobGroup` field and [`includePipelineUpdateId`](#spark-databricks-includepipelineupdateid) is set to `true`)                       |
+  | `databricksPipelineFlowId`   | string    | The pipeline update flow ID for the flow in the associated Databricks pipeline update (only included if the pipeline update flow ID is present in the `jobGroup` field and  [`databricksPipelindFlowId`](#spark-databricks-includepipelineflowid) is set to `true`) |
+
+If the value of the `jobGroup` field does _not_ follow one of the recognized
+formats (for example, if the `jobGroup` has been customized using the
+[`setJobGroup`](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.SparkContext.setJobGroup.html)
+function), the field value will not be parsed and none of the additional
+attributes will be available on the associated Spark job, stage and task
+metrics. Only the workspace related attributes will be available.
 
 #### Example Queries
 

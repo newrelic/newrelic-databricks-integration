@@ -5,7 +5,6 @@ import (
 	"maps"
 	"time"
 
-	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkJobs "github.com/databricks/databricks-sdk-go/service/jobs"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
@@ -23,7 +22,7 @@ type counters struct {
 
 type DatabricksJobRunReceiver struct {
 	i							*integration.LabsIntegration
-	w							*databricksSdk.WorkspaceClient
+	w							DatabricksWorkspace
 	metricPrefix				string
 	startOffset					time.Duration
 	includeRunId				bool
@@ -32,7 +31,7 @@ type DatabricksJobRunReceiver struct {
 
 func NewDatabricksJobRunReceiver(
 	i *integration.LabsIntegration,
-	w *databricksSdk.WorkspaceClient,
+	w DatabricksWorkspace,
 	metricPrefix string,
 	startOffset time.Duration,
 	includeRunId bool,
@@ -72,12 +71,7 @@ func (d *DatabricksJobRunReceiver) PollMetrics(
 	*/
 	lastRunMilli := time.Now().Add(-d.i.Interval * time.Second).UnixMilli()
 
-	listRunsRequest := databricksSdkJobs.ListRunsRequest{
-		StartTimeFrom: time.Now().Add(-d.startOffset).UnixMilli(),
-		ExpandTasks: true,
-	}
-
-	all := d.w.Jobs.ListRuns(ctx, listRunsRequest)
+	all := d.w.ListJobRuns(ctx, d.startOffset)
 
 	for ; all.HasNext(ctx);  {
 		run, err := all.Next(ctx)
