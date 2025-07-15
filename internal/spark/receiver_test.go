@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/newrelic/newrelic-databricks-integration/internal/databricks"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
@@ -128,20 +129,20 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	}
 
 	// Setup mock Spark API client
-	mockClient := &sparkApiClientImpl{}
+	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
 	tags := map[string]string{"env": "test"}
 
-	// Setup metric prefix
-	metricPrefix := "test.prefix."
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
-		metricPrefix,
 		tags,
 	)
 
@@ -153,14 +154,14 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
 	assert.Equal(t, mockIntegration, sparkReceiver.i)
 	assert.Equal(t, mockClient, sparkReceiver.client)
-	assert.Equal(t, metricPrefix, sparkReceiver.metricPrefix)
 	assert.Equal(t, ClusterManagerTypeDatabricks, sparkReceiver.clusterManager)
-	assert.NotNil(t, sparkReceiver.metricDecorator)
+	assert.NotNil(t, sparkReceiver.eventDecorator)
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
 	assert.IsType(
 		t,
-		&DatabricksMetricDecorator{},
-		sparkReceiver.metricDecorator,
-		"Should return a DatabricksMetricDecorator",
+		&DatabricksSparkEventDecorator{},
+		sparkReceiver.eventDecorator,
+		"Should return a DatabricksSparkEventDecorator",
 	)
 	assert.Equal(t, tags, sparkReceiver.tags)
 }
@@ -182,20 +183,16 @@ func TestNewSparkMetricsReceiver_ClusterManagerError(t *testing.T) {
 	}
 
 	// Setup mock Spark API client
-	mockClient := &sparkApiClientImpl{}
+	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
 	tags := map[string]string{"env": "test"}
-
-	// Setup metric prefix
-	metricPrefix := "test.prefix."
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
-		metricPrefix,
 		tags,
 	)
 
@@ -236,20 +233,16 @@ func TestNewSparkMetricsReceiver_NewDatabricksWorkspaceError(t *testing.T) {
 	}
 
 	// Setup mock Spark API client
-	mockClient := &sparkApiClientImpl{}
+	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
 	tags := map[string]string{"env": "test"}
-
-	// Setup metric prefix
-	metricPrefix := "test.prefix."
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
-		metricPrefix,
 		tags,
 	)
 
@@ -276,20 +269,20 @@ func TestNewSparkMetricsReceiver_StandaloneClusterManager(t *testing.T) {
 	}
 
 	// Setup mock Spark API client
-	mockClient := &sparkApiClientImpl{}
+	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
 	tags := map[string]string{"env": "test"}
 
-	// Setup metric prefix
-	metricPrefix := "test.prefix."
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
-		metricPrefix,
 		tags,
 	)
 
@@ -301,9 +294,9 @@ func TestNewSparkMetricsReceiver_StandaloneClusterManager(t *testing.T) {
 	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
 	assert.Equal(t, mockIntegration, sparkReceiver.i)
 	assert.Equal(t, mockClient, sparkReceiver.client)
-	assert.Equal(t, metricPrefix, sparkReceiver.metricPrefix)
 	assert.Equal(t, ClusterManagerTypeStandalone, sparkReceiver.clusterManager)
-	assert.Nil(t, sparkReceiver.metricDecorator)
+	assert.Nil(t, sparkReceiver.eventDecorator)
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
 	assert.Equal(t, tags, sparkReceiver.tags)
 }
 
@@ -324,7 +317,7 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 	}
 
 	// Setup mock Spark API client
-	mockClient := &sparkApiClientImpl{}
+	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
 	tags := map[string]string{
@@ -334,15 +327,15 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 		"team":        "platform",
 	}
 
-	// Setup metric prefix
-	metricPrefix := "test.prefix."
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
-		metricPrefix,
 		tags,
 	)
 
@@ -354,9 +347,9 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
 	assert.Equal(t, mockIntegration, sparkReceiver.i)
 	assert.Equal(t, mockClient, sparkReceiver.client)
-	assert.Equal(t, metricPrefix, sparkReceiver.metricPrefix)
 	assert.Equal(t, ClusterManagerTypeStandalone, sparkReceiver.clusterManager)
-	assert.Nil(t, sparkReceiver.metricDecorator)
+	assert.Nil(t, sparkReceiver.eventDecorator)
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
 	assert.Equal(t, tags, sparkReceiver.tags)
 	assert.Equal(t, 4, len(sparkReceiver.tags), "Should have exactly 4 tags")
 	assert.Equal(t, "production", sparkReceiver.tags["environment"])
@@ -366,16 +359,29 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 }
 
 func TestSparkMetricsReceiver_GetId(t *testing.T) {
-	// Setup mock receiver instance
-	// It doesn't matter what values we use here since the GetId method doesn't
-	// rely on these values.
-	receiver := &SparkMetricsReceiver{
-		i:              &integration.LabsIntegration{},
-		client:         &sparkApiClientImpl{},
-		metricPrefix:   "test.prefix.",
-		clusterManager: ClusterManagerTypeStandalone,
-		tags:           map[string]string{"env": "test"},
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
 	}
+
+	// Setup mock Spark API client
+	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
+
+	// Create metrics receiver instance using the mock integration, client, and
+	// tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+		mockIntegration,
+		mockClient,
+		tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager
+	// and using a mock workspace, but verify just to be safe.
+	assert.NoError(t, err)
 
 	// Execute the function under test
 	id := receiver.GetId()
@@ -384,9 +390,17 @@ func TestSparkMetricsReceiver_GetId(t *testing.T) {
 	assert.Equal(t, "spark-metrics-receiver", id)
 }
 
-func TestPollMetrics_GetApplicationsError(t *testing.T) {
+func TestPollEvents_GetApplicationsError(t *testing.T) {
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
 
 	// Track if GetApplications was called
 	getApplicationsCalled := false
@@ -403,41 +417,52 @@ func TestPollMetrics_GetApplicationsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 100) // Buffer to prevent blocking
+	// Setup an event channel to receive metrics
+	eventsChan := make(chan model.Event, 100) // Buffer to prevent blocking
 
-	// Create the metrics receiver instance
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		map[string]string{},
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager
+	// and using a mock workspace, but verify just to be safe
+	assert.NoError(t, err)
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics to make sure the channel is empty
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events to make sure the channel is empty
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify result
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err.Error())
 	assert.True(t, getApplicationsCalled, "GetApplications should be called")
-	assert.Empty(t, metrics, "No metrics should be received")
+	assert.Empty(t, events, "No events should be received")
 }
 
-func TestPollMetrics_CollectExecutorMetricsError(t *testing.T) {
+func TestPollEvents_CollectExecutorMetricsError(t *testing.T) {
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -479,30 +504,27 @@ func TestPollMetrics_CollectExecutorMetricsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
-
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 500) // Buffer to prevent blocking
+	eventsChan := make(chan model.Event, 500) // Buffer to prevent blocking
 
-	// Create metrics receiver instance using the mock client and tags
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		tags,
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager,
+	// but verify just to be safe
+	assert.NoError(t, err)
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel
-	close(metricsChan)
+	close(eventsChan)
 
 	// Verify results
 	assert.Error(t, err)
@@ -511,9 +533,17 @@ func TestPollMetrics_CollectExecutorMetricsError(t *testing.T) {
     assert.True(t, getExecutorsCalled, "GetApplicationExecutors should be called")
 }
 
-func TestPollMetrics_CollectJobMetricsError(t *testing.T) {
+func TestPollEvents_CollectJobMetricsError(t *testing.T) {
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -555,30 +585,27 @@ func TestPollMetrics_CollectJobMetricsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
-
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 500) // Buffer to prevent blocking
+	eventsChan := make(chan model.Event, 500) // Buffer to prevent blocking
 
-	// Create metrics receiver instance using the mock client and tags
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		tags,
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager,
+	// but verify just to be safe
+	assert.NoError(t, err)
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel
-	close(metricsChan)
+	close(eventsChan)
 
 	// Verify results
 	assert.Error(t, err)
@@ -587,9 +614,17 @@ func TestPollMetrics_CollectJobMetricsError(t *testing.T) {
     assert.True(t, getJobsCalled, "GetApplicationJobs should be called")
 }
 
-func TestPollMetrics_CollectStageMetricsError(t *testing.T) {
+func TestPollEvents_CollectStageMetricsError(t *testing.T) {
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -631,30 +666,27 @@ func TestPollMetrics_CollectStageMetricsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
-
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 500) // Buffer to prevent blocking
+	eventsChan := make(chan model.Event, 500) // Buffer to prevent blocking
 
-	// Create metrics receiver instance using the mock client and tags
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		tags,
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager,
+	// but verify just to be safe
+	assert.NoError(t, err)
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel
-	close(metricsChan)
+	close(eventsChan)
 
 	// Verify results
 	assert.Error(t, err)
@@ -663,9 +695,17 @@ func TestPollMetrics_CollectStageMetricsError(t *testing.T) {
     assert.True(t, getStagesCalled, "GetApplicationStages should be called")
 }
 
-func TestPollMetrics_CollectRDDMetricsError(t *testing.T) {
+func TestPollEvents_CollectRDDMetricsError(t *testing.T) {
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -707,30 +747,27 @@ func TestPollMetrics_CollectRDDMetricsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
-
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 500) // Buffer to prevent blocking
+	eventsChan := make(chan model.Event, 500) // Buffer to prevent blocking
 
-	// Create metrics receiver instance using the mock client and tags
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		tags,
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are defaulting the clusterManager,
+	// but verify just to be safe
+	assert.NoError(t, err)
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel
-	close(metricsChan)
+	close(eventsChan)
 
 	// Verify results
 	assert.Error(t, err)
@@ -739,9 +776,35 @@ func TestPollMetrics_CollectRDDMetricsError(t *testing.T) {
     assert.True(t, getRDDsCalled, "GetApplicationRDDs should be called")
 }
 
-func TestPollMetrics(t *testing.T) {
+func TestPollEvents(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Set the cluster manager type to databricks so we use the
+	// DatabricksSparkEventDecorator
+	viper.Set("spark.clusterManager", "databricks")
+
+	// Setup up mock workspace
+	_, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -754,11 +817,38 @@ func TestPollMetrics(t *testing.T) {
 	// Setup mock SparkExecutor
 	sparkExecutor := SparkExecutor{Id: "exec-1", MemoryUsed: 1024}
 
+	// Setup job/stage/task times
+	jobSubmissionTime := now.UTC().Add(10 * time.Second)
+	stageFirstTaskLaunchedTime := now.UTC().Add(30 * time.Second)
+	taskLaunchTime := now.UTC().Add(30 * time.Second)
+
 	// Setup mock SparkJob
-	sparkJob := SparkJob{JobId: 1, NumActiveTasks: 20}
+	sparkJob := SparkJob{
+		JobId: 1,
+		SubmissionTime: jobSubmissionTime.Format(RFC3339Milli),
+	}
 
 	// Setup mock SparkStage
-	sparkStage := SparkStage{StageId: 1, NumTasks: 5}
+	sparkStage := SparkStage{
+		StageId: 1,
+		FirstTaskLaunchedTime: stageFirstTaskLaunchedTime.Format(RFC3339Milli),
+		Tasks: map[string]SparkTask{
+			"0": {
+				TaskId: 0,
+				// RUNNING is used here to ensure a completion event is not
+				// generated
+				Status: "RUNNING",
+				LaunchTime: taskLaunchTime.Format(RFC3339Milli),
+			},
+			"1": {
+				TaskId: 1,
+				// RUNNING is used here to ensure a completion event is not
+				// generated
+				Status: "RUNNING",
+				LaunchTime: taskLaunchTime.Format(RFC3339Milli),
+			},
+		},
+	}
 
 	// Setup mock SparkRDD
 	sparkRDD := SparkRDD{Id: 1, NumPartitions: 3}
@@ -842,40 +932,47 @@ func TestPollMetrics(t *testing.T) {
 		return []SparkRDD{sparkRDD}, nil
 	}
 
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
-
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 500) // Buffer to prevent blocking
+	eventsChan := make(chan model.Event, 500) // Buffer to prevent blocking
 
-	// Create metrics receiver instance using the mock client and tags
-	receiver := &SparkMetricsReceiver{
-		nil,
-		mockClient,
-		"spark.",
-		ClusterManagerTypeStandalone,
-		nil,
-		tags,
-	}
+	// Create the metrics receiver instance using the mock integration, client,
+	// and tags
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+        mockIntegration,
+        mockClient,
+        tags,
+	)
+
+	// There should not be any error since we are using a mock workspace, but
+	// verify just to be safe
+	assert.NoError(t, err)
+
+	// Verify that the initial lastRun timestamp is set correctly
+	sparkReceiver, ok := receiver.(*SparkMetricsReceiver)
+	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
+
+	// Now reset the mock Now function to simulate time progression
+	now2 := now.Add(time.Minute)
+	Now = func () time.Time { return now2 }
 
 	// Execute the function under test
-	err := receiver.PollMetrics(context.Background(), metricsChan)
+	err = receiver.PollEvents(context.Background(), eventsChan)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
 	// Collect all metrics for verification
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.NoError(t, err)
-	assert.NotEmpty(t, metrics, "Should have received metrics")
+	assert.NotEmpty(t, events, "Should have received events")
+	assert.Equal(t, 6, len(events), "Should have received 6 events")
 	assert.True(t, getApplicationsCalled, "GetApplications should be called")
 	assert.True(
 		t,
@@ -886,71 +983,195 @@ func TestPollMetrics(t *testing.T) {
 	assert.True(t, getStagesCalled, "GetApplicationStages should be called")
 	assert.True(t, getRDDsCalled, "GetApplicationRDDs should be called")
 
-	// Verify one metric from each collect* call
-	foundExecutorMemoryUsed := false
-	foundJobNumActiveTasks := false
-	foundStageNumTasksTotal := false
-	foundRDDNumPartitions := false
+	// Verify that the lastRun timestamp is updated correctly
+	assert.Equal(t, now2.UTC(), sparkReceiver.lastRun)
 
-	for _, metric := range metrics {
-		assert.NotNil(t, metric.Attributes)
+	validEventTypes := []string{
+		"SparkExecutorSample",
+		"SparkJob",
+		"SparkStage",
+		"SparkTask",
+		"SparkRDDSample",
+	}
+
+	// Verify one metric from each collect* call
+	foundSparkExecutorSample := false
+	foundSparkJob := false
+	foundSparkStage := false
+	foundSparkTask0 := false
+	foundSparkTask1 := false
+	foundSparkTaskOther := false
+	foundSparkRDD := false
+
+	// Verify that all events have the expected attributes
+	for _, event := range events {
+		assert.NotNil(t, event.Attributes)
 
 		// Verify basic attributes
-		assert.Contains(t, metric.Attributes, "sparkAppId")
-		assert.Equal(t, "app-123456", metric.Attributes["sparkAppId"])
-		assert.Contains(t, metric.Attributes, "sparkAppName")
-		assert.Equal(t, "Test Spark App", metric.Attributes["sparkAppName"])
-		assert.Contains(t, metric.Attributes, "environment")
-		assert.Equal(t, "test", metric.Attributes["environment"])
-		assert.Contains(t, metric.Attributes, "cluster")
-		assert.Equal(t, "spark-test", metric.Attributes["cluster"])
+		assert.Contains(t, event.Attributes, "sparkAppId")
+		assert.Equal(t, "app-123456", event.Attributes["sparkAppId"])
+		assert.Contains(t, event.Attributes, "sparkAppName")
+		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
+		assert.Contains(t, event.Attributes, "environment")
+		assert.Equal(t, "test", event.Attributes["environment"])
+		assert.Contains(t, event.Attributes, "cluster")
+		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
-		if metric.Name == "spark.app.executor.memoryUsed" {
-			foundExecutorMemoryUsed = true
-			assert.Equal(t, float64(1024), metric.Value.Float())
-		} else if metric.Name == "spark.app.job.tasks" {
-			status, ok := metric.Attributes["sparkAppTaskStatus"]
-			if ok && status == "active" {
-				foundJobNumActiveTasks = true
-				assert.Equal(t, float64(20), metric.Value.Float())
+		// Verify workspace attributes
+		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
+		assert.Equal(t, int64(12345), event.Attributes["databricksWorkspaceId"])
+		assert.Contains(t, event.Attributes, "databricksWorkspaceName")
+		assert.Equal(
+			t,
+			"foo.fakedomain.local",
+			event.Attributes["databricksWorkspaceName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksWorkspaceUrl")
+		assert.Equal(
+			t,
+			"https://foo.fakedomain.local",
+			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify timestamp
+		assert.Equal(
+			t,
+			now2.UnixMilli(),
+			event.Timestamp,
+			"Should have the correct event timestamp",
+		)
+
+		// Verify event type
+		assert.Contains(t, validEventTypes, event.Type)
+
+		if event.Type == "SparkExecutorSample" {
+			// Verify SparkExecutorSample events have expected attributes
+			foundSparkExecutorSample = true
+
+			assert.Contains(t, event.Attributes, "executorId")
+			assert.Equal(t, "exec-1", event.Attributes["executorId"])
+			assert.Contains(t, event.Attributes, "memoryUsedBytes")
+			assert.Equal(
+				t,
+				1024,
+				event.Attributes["memoryUsedBytes"],
+			)
+		} else if event.Type == "SparkJob" {
+			// Verify SparkJob events have expected attributes
+			foundSparkJob = true
+
+			assert.Contains(t, event.Attributes, "jobId")
+			assert.Equal(
+				t,
+				1,
+				event.Attributes["jobId"],
+			)
+			assert.Contains(t, event.Attributes, "submissionTime")
+			assert.Equal(
+                t,
+                jobSubmissionTime.UnixMilli(),
+                event.Attributes["submissionTime"],
+            )
+		} else if event.Type == "SparkStage" {
+			// Verify SparkStage events have expected attributes
+			foundSparkStage = true
+
+			assert.Contains(t, event.Attributes, "stageId")
+			assert.Equal(
+                t,
+                1,
+                event.Attributes["stageId"],
+            )
+			assert.Contains(t, event.Attributes, "firstTaskLaunchedTime")
+			assert.Equal(
+                t,
+                stageFirstTaskLaunchedTime.UnixMilli(),
+                event.Attributes["firstTaskLaunchedTime"],
+            )
+		} else if event.Type == "SparkTask" {
+			// Verify SparkTask events have expected attributes
+			assert.Contains(t, event.Attributes, "taskId")
+
+			if event.Attributes["taskId"] == 0 {
+				foundSparkTask0 = true
+			} else if event.Attributes["taskId"] == 1 {
+				foundSparkTask1 = true
+			} else {
+				foundSparkTaskOther = true
 			}
-		} else if metric.Name == "spark.app.stage.tasks.total" {
-			foundStageNumTasksTotal = true
-			assert.Equal(t, float64(5), metric.Value.Float())
-		} else if metric.Name == "spark.app.storage.rdd.partitions" {
-			foundRDDNumPartitions = true
-			assert.Equal(t, float64(3), metric.Value.Float())
+
+			assert.Contains(t, event.Attributes, "stageId")
+			assert.Equal(
+                t,
+                1,
+                event.Attributes["stageId"],
+            )
+		} else if event.Type == "SparkRDDSample" {
+			// Verify SparkRDD events have expected attributes
+			foundSparkRDD = true
+
+			assert.Contains(t, event.Attributes, "rddId")
+			assert.Equal(t, 1, event.Attributes["rddId"])
+			assert.Contains(t, event.Attributes, "partitionCount")
+			assert.Equal(
+                t,
+                3,
+                event.Attributes["partitionCount"],
+            )
 		}
 	}
 
 	assert.True(
 		t,
-		foundExecutorMemoryUsed,
-		"Should have found executor MemoryUsed metric",
+		foundSparkExecutorSample,
+		"Should have found executor SparkExecutorSample event",
 	)
 	assert.True(
 		t,
-		foundJobNumActiveTasks,
-		"Should have found job NumActiveTasks metric",
+		foundSparkJob,
+		"Should have found job SparkJob event",
 	)
 	assert.True(
 		t,
-		foundStageNumTasksTotal,
-		"Should have found stage NumTasks metric",
+		foundSparkStage,
+		"Should have found stage SparkStage event",
 	)
 	assert.True(
 		t,
-		foundRDDNumPartitions,
-		"Should have found RDD NumPartitions metric",
+		foundSparkTask0,
+		"Should have found SparkTask for task 0",
+	)
+	assert.True(
+		t,
+		foundSparkTask1,
+		"Should have found SparkTask for task 1",
+	)
+	assert.False(
+		t,
+		foundSparkTaskOther,
+		"Should not have found other SparkTask events",
+	)
+	assert.True(
+		t,
+		foundSparkRDD,
+		"Should have found SparkRDDSample event",
 	)
 }
 
-func TestCollectSparkAppExecutorMetrics_Error(t *testing.T) {
+func TestCollectSparkAppExecutorMetrics_GetApplicationExecutorsError(
+	t *testing.T,
+) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -977,39 +1198,32 @@ func TestCollectSparkAppExecutorMetrics_Error(t *testing.T) {
 	}
 
 	// Setup metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 100) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	eventsChan := make(chan model.Event, 100) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppExecutorMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics to make sure the channel is empty
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events to make sure the channel is empty
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.Error(t, err)
 	assert.Equal(t, expectedError, err.Error())
 	assert.True(t, getApplicationsCalled, "GetApplications should be called")
-	assert.Empty(t, metrics, "No metrics should be received")
+	assert.Empty(t, events, "No events should be received")
 }
 
 func TestCollectSparkAppExecutorMetrics(t *testing.T) {
@@ -1017,7 +1231,17 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -1025,41 +1249,24 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 		Name: "Test Spark App",
 	}
 
+	// Setup add time
+	addTime := now.UTC()
+	addTimeFormatted := addTime.Format(RFC3339Milli)
+
 	// Setup mock executors
 	mockExecutors := []SparkExecutor{
 		{
 			Id:                "executor-1",
+			IsActive:          true,
+			IsExcluded:        false,
+			IsBlacklisted:     false,
+			AddTime:           addTimeFormatted,
 			RddBlocks:         10,
-			MemoryUsed:        1024,
-			DiskUsed:          2048,
-			TotalCores:        4,
-			MaxTasks:          8,
-			ActiveTasks:       2,
-			FailedTasks:       1,
-			CompletedTasks:    5,
-			TotalTasks:        8,
-			TotalDuration:     5000,
-			TotalGCTime:       500,
-			TotalInputBytes:   10240,
-			TotalShuffleRead:  2048,
-			TotalShuffleWrite: 1024,
-			MaxMemory:         4096,
 			MemoryMetrics: SparkExecutorMemoryMetrics{
 				UsedOnHeapStorageMemory:   512,
-				UsedOffHeapStorageMemory:  256,
-				TotalOnHeapStorageMemory:  1024,
-				TotalOffHeapStorageMemory: 1024,
 			},
 			PeakMemoryMetrics: SparkExecutorPeakMemoryMetrics{
 				JVMHeapMemory:          2048,
-				JVMOffHeapMemory:       1024,
-				OnHeapExecutionMemory:  512,
-				OffHeapExecutionMemory: 256,
-				OnHeapStorageMemory:    512,
-				OffHeapStorageMemory:   256,
-				DirectPoolMemory:       128,
-				MappedPoolMemory:       64,
-				TotalOffHeapMemory:     2048,
 			},
 		},
 	}
@@ -1074,430 +1281,125 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 		return mockExecutors, nil
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 1000) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 1000) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppExecutorMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics for verification
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events for verification
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.NoError(t, err)
-	assert.NotEmpty(t, metrics, "Should have received metrics")
+	assert.NotEmpty(t, events, "Should have received events")
 
-	// Verify that all metrics have the expected attributes
-	for _, metric := range metrics {
-		assert.NotNil(t, metric.Attributes)
+	// Verify that all events have the expected attributes
+	for _, event := range events {
+		// Verify timestamp
+		assert.Equal(
+			t,
+			now.UnixMilli(),
+			event.Timestamp,
+			"Should have the correct event timestamp",
+		)
+
+		// Verify event type
+		assert.Equal(t, "SparkExecutorSample", event.Type)
+
+		// Verify attributes
+		assert.NotNil(t, event.Attributes)
 
 		// Verify basic attributes
-		assert.Contains(t, metric.Attributes, "sparkAppId")
-		assert.Equal(t, "app-123456", metric.Attributes["sparkAppId"])
-		assert.Contains(t, metric.Attributes, "sparkAppName")
-		assert.Equal(t, "Test Spark App", metric.Attributes["sparkAppName"])
-		assert.Contains(t, metric.Attributes, "environment")
-		assert.Equal(t, "test", metric.Attributes["environment"])
-		assert.Contains(t, metric.Attributes, "cluster")
-		assert.Equal(t, "spark-test", metric.Attributes["cluster"])
+		assert.Contains(t, event.Attributes, "sparkAppId")
+		assert.Equal(t, "app-123456", event.Attributes["sparkAppId"])
+		assert.Contains(t, event.Attributes, "sparkAppName")
+		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
+		assert.Contains(t, event.Attributes, "environment")
+		assert.Equal(t, "test", event.Attributes["environment"])
+		assert.Contains(t, event.Attributes, "cluster")
+		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceId")
-		assert.Equal(t, int64(12345), metric.Attributes["databricksWorkspaceId"])
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceName")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
+		assert.Equal(t, int64(12345), event.Attributes["databricksWorkspaceId"])
+		assert.Contains(t, event.Attributes, "databricksWorkspaceName")
 		assert.Equal(
 			t,
 			"foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceName"],
+			event.Attributes["databricksWorkspaceName"],
 		)
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceUrl")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceUrl")
 		assert.Equal(
 			t,
 			"https://foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceUrl"],
+			event.Attributes["databricksWorkspaceUrl"],
 		)
 
-		// Verify executor attributes
-		assert.Contains(t, metric.Attributes, "sparkAppExecutorId")
-		assert.Equal(t, "executor-1", metric.Attributes["sparkAppExecutorId"])
+		// Verify a few executor attributes to ensure values are correctly
+		// passed
 
-		// Verify metric name format
-		assert.True(
+		assert.Contains(t, event.Attributes, "executorId")
+		assert.Equal(t, "executor-1", event.Attributes["executorId"])
+
+		assert.Contains(t, event.Attributes, "rddBlockCount")
+		assert.Equal(t, 10, event.Attributes["rddBlockCount"])
+
+		assert.Contains(t, event.Attributes, "onHeapMemoryUsedBytes")
+		assert.Equal(
 			t,
-			strings.HasPrefix(metric.Name, "spark.app.executor."),
-			"Metric name should start with 'spark.app.executor.' but found: %s",
-			metric.Name,
+			512,
+			event.Attributes["onHeapMemoryUsedBytes"],
+		)
+
+		assert.Contains(t, event.Attributes, "peakJvmHeapMemoryUsedBytes")
+		assert.Equal(
+			t,
+			2048,
+			event.Attributes["peakJvmHeapMemoryUsedBytes"],
+		)
+
+		assert.Contains(t, event.Attributes, "isActive")
+		assert.Equal(
+			t,
+			true,
+			event.Attributes["isActive"],
+		)
+
+		assert.Contains(t, event.Attributes, "isExcluded")
+		assert.Equal(
+			t,
+			false,
+			event.Attributes["isExcluded"],
+		)
+
+		assert.Contains(t, event.Attributes, "isBlacklisted")
+		assert.Equal(
+			t,
+			false,
+			event.Attributes["isBlacklisted"],
+		)
+
+		assert.Contains(t, event.Attributes, "addTime")
+		assert.Equal(
+			t,
+			addTime.UnixMilli(),
+			event.Attributes["addTime"],
 		)
 	}
-
-	// Verify a few metrics to ensure values are correctly passed
-	foundRddBlocks := false
-	foundUsedOnHeapStorageMemory := false
-	foundPeakJVMHeapMemory := false
-
-	for _, metric := range metrics {
-		if metric.Name == "spark.app.executor.rddBlocks" {
-			foundRddBlocks = true
-			assert.Equal(t, float64(10), metric.Value.Float())
-		} else if metric.Name == "spark.app.executor.memory.usedOnHeapStorage" {
-			foundUsedOnHeapStorageMemory = true
-			assert.Equal(t, float64(512), metric.Value.Float())
-		} else if metric.Name == "spark.app.executor.memory.peak.jvmHeap" {
-			foundPeakJVMHeapMemory = true
-			assert.Equal(t, float64(2048), metric.Value.Float())
-		}
-	}
-
-	assert.True(
-		t,
-		foundRddBlocks,
-		"Should have found rddBlocks metric",
-	)
-
-	assert.True(
-		t,
-		foundUsedOnHeapStorageMemory,
-		"Should have found usedOnHeapStorageMemory metric",
-	)
-
-	assert.True(
-		t,
-		foundPeakJVMHeapMemory,
-		"Should have found jvmHeapMemory metric",
-	)
-}
-
-func TestUpdateJobCounters_RunningJob(t *testing.T) {
-	// Setup mock SparkJob with running status
-	job := &SparkJob{
-		JobId:  123,
-		Name:   "Test Running Job",
-		Status: "running", // Status is "running"
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test
-	updateJobCounters(job, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1), counters.running,
-		"Should increment running counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.unknown,
-		"Should not change unknown counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.succeeded,
-		"Should not change succeeded counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-}
-
-func TestUpdateJobCounters_UnknownJob(t *testing.T) {
-	// Setup mock SparkJob with unknown status
-	job := &SparkJob{
-		JobId:  124,
-		Name:   "Test Unknown Job",
-		Status: "unknown", // Status is "unknown"
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test
-	updateJobCounters(job, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.unknown,
-		"Should increment unknown counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.running,
-		"Should not change running counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.succeeded,
-		"Should not change succeeded counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-}
-
-func TestUpdateJobCounters_SucceededJob(t *testing.T) {
-	// Setup mock SparkJob with succeeded status
-	job := &SparkJob{
-		JobId:  124,
-		Name:   "Test Succeeded Job",
-		Status: "succeeded", // Status is "succeeded"
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test
-	updateJobCounters(job, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.succeeded,
-		"Should increment succeeded counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.running,
-		"Should not change running counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.unknown,
-		"Should not change unknown counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-}
-
-func TestUpdateJobCounters_FailedJob(t *testing.T) {
-	// Setup mock SparkJob with failed status
-	job := &SparkJob{
-		JobId:  124,
-		Name:   "Test Failed Job",
-		Status: "failed", // Status is "failed"
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test
-	updateJobCounters(job, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.failed,
-		"Should increment failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.running,
-		"Should not change running counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.unknown,
-		"Should not change unknown counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.succeeded,
-		"Should not change succeeded counter",
-	)
-}
-
-func TestUpdateJobCounters_OtherStatus(t *testing.T) {
-	// Setup mock SparkJob with a status that isn't explicitly handled
-	job := &SparkJob{
-		JobId:  125,
-		Name:   "Test Unrecognized Job",
-		Status: "pending", // Status is not one of the recognized values
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test
-	updateJobCounters(job, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(0),
-		counters.running,
-		"Should not change running counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.unknown, "Should not change unknown counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.succeeded,
-		"Should not change succeeded counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-}
-
-func TestUpdateJobCounters_CaseInsensitivity(t *testing.T) {
-	// Setup various SparkJob instances with different case formats for status
-	jobRunning := &SparkJob{
-		JobId:  126,
-		Name:   "Test Case Insensitivity - Running",
-		Status: "RUNNING", // Uppercase status
-	}
-
-	jobUnknown := &SparkJob{
-		JobId:  127,
-		Name:   "Test Case Insensitivity - Unknown",
-		Status: "Unknown", // Title case status
-	}
-
-	jobSucceeded := &SparkJob{
-		JobId:  128,
-		Name:   "Test Case Insensitivity - Succeeded",
-		Status: "Succeeded", // Title case status
-	}
-
-	jobFailed := &SparkJob{
-		JobId:  129,
-		Name:   "Test Case Insensitivity - Failed",
-		Status: "FAiLed", // Mixed case status
-	}
-
-	// Setup jobCounters struct
-	counters := &jobCounters{
-		running:   0,
-		unknown:   0,
-		succeeded: 0,
-		failed:    0,
-	}
-
-	// Execute the function under test for each job
-	updateJobCounters(jobRunning, counters)
-	updateJobCounters(jobUnknown, counters)
-	updateJobCounters(jobSucceeded, counters)
-	updateJobCounters(jobFailed, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.running,
-		"Should increment running counter with uppercase RUNNING",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.unknown,
-		"Should increment unknown counter with title case Unknown",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.succeeded,
-		"Should increment succeeded counter with title case Succeeded",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.failed,
-		"Should increment failed counter with mixed case FaiLed",
-	)
 }
 
 func TestCollectSparkAppJobMetrics_GetApplicationJobsError(t *testing.T) {
@@ -1505,7 +1407,13 @@ func TestCollectSparkAppJobMetrics_GetApplicationJobsError(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -1532,32 +1440,26 @@ func TestCollectSparkAppJobMetrics_GetApplicationJobsError(t *testing.T) {
 	}
 
 	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 100) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	eventsChan := make(chan model.Event, 100) // Buffer to prevent blocking
 
 	// Execute the function under test
-	err := collectSparkAppJobMetrics(
+	_, err := collectSparkAppJobMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
+		time.Now().UTC(),
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics to make sure the channel is empty
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events to make sure the channel is empty
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
@@ -1568,7 +1470,7 @@ func TestCollectSparkAppJobMetrics_GetApplicationJobsError(t *testing.T) {
 		getApplicationJobsCalled,
 		"GetApplicationJobs should be called",
 	)
-	assert.Empty(t, metrics, "No metrics should be received")
+	assert.Empty(t, events, "No events should be received")
 }
 
 func TestCollectSparkAppJobMetrics(t *testing.T) {
@@ -1576,7 +1478,25 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
+
+	// Setup times to be used to test behavior of event production based on
+	// lastRun time.
+	lastRun := now.UTC()
+	pastTime := lastRun.Add(-15 * time.Second)
+	pastTimeFormatted := pastTime.Format(RFC3339Milli)
+	futureTime := lastRun.Add(15 * time.Second)
+	futureTimeFormatted := futureTime.Format(RFC3339Milli)
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -1587,84 +1507,92 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 	// Setup mock jobs
 	mockJobs := []SparkJob{
 		{
-			JobId:               123,
-			Name:                "Test Job",
-			SubmissionTime:      "2023-01-01T00:00:00.000GMT",
-			CompletionTime:      "2023-01-01T00:05:30.000GMT",
-			JobGroup:            "test-group",
-			StageIds:            []int{1, 2, 3},
+			JobId:               120,
+			Name:                "Test Job Submit Before / Complete Before",
+			Description:         "",
+			// This job should produce no events
+			SubmissionTime:      pastTimeFormatted,
+			CompletionTime:      pastTimeFormatted,
 			Status:              "succeeded",
-			NumTasks:            100,
-			NumActiveTasks:      0,
 			NumCompletedTasks:   95,
-			NumSkippedTasks:     2,
-			NumFailedTasks:      3,
-			NumKilledTasks:      0,
 			NumCompletedIndices: 95,
-			NumActiveStages:     0,
 			NumCompletedStages:  3,
-			NumSkippedStages:    0,
-			NumFailedStages:     0,
+		},
+		{
+			JobId:               121,
+			Name:                "Test Job Submit Before / Complete Empty",
+			Description:         "",
+			// This job should produce no events
+			SubmissionTime:      pastTimeFormatted,
+			CompletionTime:      "",
+			Status:              "running",
+			NumCompletedTasks:   95,
+			NumCompletedIndices: 95,
+			NumCompletedStages:  3,
+		},
+		{
+			JobId:               122,
+			Name:                "Test Job Submit Before / Complete After",
+			Description:         "This is test job 122",
+			// This job should produce one complete event
+			SubmissionTime:      pastTimeFormatted,
+			CompletionTime:      futureTimeFormatted,
+			Status:              "succeeded",
+			JobGroup:			 "group1",
+			JobTags: 		     []string{"tag1", "tag2"},
+			NumCompletedTasks:   95,
+			NumCompletedIndices: 95,
+			NumCompletedStages:  3,
+		},
+		{
+			JobId:               123,
+			Name:                "Test Job Submit After / Complete Empty",
+			Description:         "This is test job 123",
+			// This job should produce one submit event
+			SubmissionTime:      futureTimeFormatted,
+			CompletionTime:      "",
+			Status:              "running",
+			JobGroup:			 "group2",
+			JobTags: 		     []string{"tag3", "tag4"},
+			NumCompletedTasks:   95,
+			NumCompletedIndices: 95,
+			NumCompletedStages:  3,
 		},
 		{
 			JobId:               124,
-			Name:                "Running Job",
-			SubmissionTime:      "2023-01-01T00:10:00.000GMT",
-			CompletionTime:      "",
-			JobGroup:            "test-group",
-			StageIds:            []int{4, 5},
-			Status:              "running",
-			NumTasks:            80,
-			NumActiveTasks:      30,
-			NumCompletedTasks:   50,
-			NumSkippedTasks:     0,
-			NumFailedTasks:      0,
-			NumKilledTasks:      0,
-			NumCompletedIndices: 50,
-			NumActiveStages:     1,
-			NumCompletedStages:  1,
-			NumSkippedStages:    0,
-			NumFailedStages:     0,
+			Name:                "Test Job Submit After / Complete After",
+			Description:         "This is test job 124",
+			// This job should produce one submit event and one complete event
+			SubmissionTime:      futureTimeFormatted,
+			CompletionTime:      futureTimeFormatted,
+			Status:              "failed",
+			JobGroup:			 "group3",
+			JobTags: 		     []string{"tag5", "tag6"},
+			NumCompletedTasks:   5,
+			NumCompletedIndices: 10,
+			NumCompletedStages:  5,
 		},
 		{
 			JobId:               125,
-			Name:                "Failed Job",
-			SubmissionTime:      "2023-01-01T00:15:00.000GMT",
-			CompletionTime:      "2023-01-01T00:16:45.000GMT",
-			JobGroup:            "test-group",
-			StageIds:            []int{6},
-			Status:              "failed",
-			NumTasks:            50,
-			NumActiveTasks:      0,
-			NumCompletedTasks:   30,
-			NumSkippedTasks:     0,
-			NumFailedTasks:      20,
-			NumKilledTasks:      0,
-			NumCompletedIndices: 30,
-			NumActiveStages:     0,
-			NumCompletedStages:  0,
-			NumSkippedStages:    0,
-			NumFailedStages:     1,
+			Name:                "Test Job Invalid Submission Time",
+			// This job should produce no events
+			SubmissionTime:      "invalid_submission_time",
+			CompletionTime:      futureTimeFormatted,
+			Status:              "succeeded",
+			NumCompletedTasks:   100,
+			NumCompletedIndices: 45,
+			NumCompletedStages:  7,
 		},
 		{
 			JobId:               126,
 			Name:                "Test Job Invalid Completion Time",
-			SubmissionTime:      "2023-01-01T00:00:00.000GMT",
+			// This job should produce no events
+			SubmissionTime:      pastTimeFormatted,
 			CompletionTime:      "invalid_completion_time",
-			JobGroup:            "test-group",
-			StageIds:            []int{7, 8},
 			Status:              "succeeded",
-			NumTasks:            100,
-			NumActiveTasks:      0,
-			NumCompletedTasks:   95,
-			NumSkippedTasks:     2,
-			NumFailedTasks:      3,
-			NumKilledTasks:      0,
-			NumCompletedIndices: 95,
-			NumActiveStages:     0,
-			NumCompletedStages:  3,
-			NumSkippedStages:    0,
-			NumFailedStages:     0,
+			NumCompletedTasks:   100,
+			NumCompletedIndices: 45,
+			NumCompletedStages:  7,
 		},
 	}
 
@@ -1678,673 +1606,259 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 		return mockJobs, nil
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 1000) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 1000) // Buffer to prevent blocking
 
 	// Execute the function under test
-	err := collectSparkAppJobMetrics(
+	completedJobs, err := collectSparkAppJobMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
+		lastRun,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics for verification
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events for verification
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.NoError(t, err)
-	assert.NotEmpty(t, metrics, "Should have received metrics")
+	assert.NotNil(t, completedJobs, "Should return completed jobs")
+	assert.Equal(t, 2, len(completedJobs), "Should have two completed jobs")
+	assert.NotEmpty(t, events, "Should have received events")
+	assert.Equal(t, 4, len(events), "Should have received four events")
 
-	jobStatuses := map[int]string{
-		123: "succeeded",
-		124: "running",
-		125: "failed",
+	// Verify completed jobs
+	assert.Equal(
+		t,
+		mockJobs[2],
+		completedJobs[0],
+		"First completed job does not match expected completed job",
+	)
+	assert.Equal(
+		t,
+		mockJobs[4],
+		completedJobs[1],
+		"Second completed job does not match expected completed job",
+	)
+
+	validEvents := []string{"start", "complete"}
+
+	jobIds := []int{122, 123, 124}
+
+	jobNames := map[int]string{
+		122: "Test Job Submit Before / Complete After",
+		123: "Test Job Submit After / Complete Empty",
+		124: "Test Job Submit After / Complete After",
 	}
 
-	// Verify that all metrics have the expected attributes
-	for _, metric := range metrics {
-		assert.NotNil(t, metric.Attributes)
+	jobDescriptions := map[int]string{
+		122: "This is test job 122",
+		123: "This is test job 123",
+		124: "This is test job 124",
+	}
+
+	jobGroups := map[int]string{
+		122: "group1",
+		123: "group2",
+		124: "group3",
+	}
+
+	jobTags := map[int]string{
+		122: "tag1,tag2",
+		123: "tag3,tag4",
+		124: "tag5,tag6",
+	}
+
+	jobStatuses := map[int]string{
+		122: "succeeded",
+		124: "failed",
+	}
+
+	jobSubmissionTimes := map[int]int64{
+		122: pastTime.UnixMilli(),
+		124: futureTime.UnixMilli(),
+	}
+
+	jobCompletedStageCount := map[int]int{
+		122: 3,
+		124: 5,
+	}
+
+	jobCompletedTaskCount := map[int]int{
+		122: 95,
+		124: 5,
+	}
+
+	jobCompletedIndexCount := map[int]int{
+		122: 95,
+		124: 10,
+	}
+
+	found122Complete := false
+	found123Start := false
+	found124Start := false
+	found124Complete := false
+	foundOther := false
+
+	// Verify that all events have the expected attributes
+	for _, event := range events {
+		// Verify timestamp
+		assert.Equal(
+			t,
+			now.UnixMilli(),
+			event.Timestamp,
+			"Should have the correct event timestamp",
+		)
+
+		// Verify event type
+		assert.Equal(t, "SparkJob", event.Type)
+
+		// Verify attributes
+		assert.NotNil(t, event.Attributes)
 
 		// Verify basic attributes
-		assert.Contains(t, metric.Attributes, "sparkAppId")
-		assert.Equal(t, "app-123456", metric.Attributes["sparkAppId"])
-		assert.Contains(t, metric.Attributes, "sparkAppName")
-		assert.Equal(t, "Test Spark App", metric.Attributes["sparkAppName"])
-		assert.Contains(t, metric.Attributes, "environment")
-		assert.Equal(t, "test", metric.Attributes["environment"])
-		assert.Contains(t, metric.Attributes, "cluster")
-		assert.Equal(t, "spark-test", metric.Attributes["cluster"])
+		assert.Contains(t, event.Attributes, "sparkAppId")
+		assert.Equal(t, "app-123456", event.Attributes["sparkAppId"])
+		assert.Contains(t, event.Attributes, "sparkAppName")
+		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
+		assert.Contains(t, event.Attributes, "environment")
+		assert.Equal(t, "test", event.Attributes["environment"])
+		assert.Contains(t, event.Attributes, "cluster")
+		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceId")
-		assert.Equal(t, int64(12345), metric.Attributes["databricksWorkspaceId"])
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceName")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
+		assert.Equal(t, int64(12345), event.Attributes["databricksWorkspaceId"])
+		assert.Contains(t, event.Attributes, "databricksWorkspaceName")
 		assert.Equal(
 			t,
 			"foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceName"],
+			event.Attributes["databricksWorkspaceName"],
 		)
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceUrl")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceUrl")
 		assert.Equal(
 			t,
 			"https://foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceUrl"],
+			event.Attributes["databricksWorkspaceUrl"],
 		)
 
-		if metric.Name != "spark.app.jobs" {
-			// Verify job attributes
-			assert.Contains(t, metric.Attributes, "sparkAppJobId")
-			assert.Contains(
-				t,
-				[]int{123, 124, 125},
-				metric.Attributes["sparkAppJobId"],
-			)
-			assert.Contains(t, metric.Attributes, "sparkAppJobStatus")
+		// Verify event
+		assert.Contains(t, event.Attributes, "event")
+		assert.Contains(t, validEvents, event.Attributes["event"])
+
+		evt := event.Attributes["event"].(string)
+
+		// Verify job attributes
+		assert.Contains(t, event.Attributes, "jobId")
+		assert.Contains(t, jobIds, event.Attributes["jobId"])
+
+		jobId := event.Attributes["jobId"].(int)
+
+		assert.Contains(t, event.Attributes, "jobName")
+		assert.Equal(t, jobNames[jobId], event.Attributes["jobName"])
+
+		assert.Contains(t, event.Attributes, "description")
+		assert.Equal(
+			t,
+			jobDescriptions[jobId],
+			event.Attributes["description"],
+		)
+
+		assert.Contains(t, event.Attributes, "jobGroup")
+		assert.Equal(t, jobGroups[jobId], event.Attributes["jobGroup"])
+
+		assert.Contains(t, event.Attributes, "jobTags")
+		assert.Equal(
+			t,
+			jobTags[jobId],
+			event.Attributes["jobTags"],
+		)
+
+		if evt == "start" {
+            if jobId == 123 {
+                found123Start = true
+            } else if jobId == 124 {
+                found124Start = true
+            } else {
+                foundOther = true
+				continue
+            }
+
+			assert.Contains(t, event.Attributes, "submissionTime")
+            assert.Equal(
+            	t,
+            	futureTime.UnixMilli(),
+            	event.Attributes["submissionTime"],
+            )
+        } else if evt == "complete" {
+			if jobId == 122 {
+				found122Complete = true
+			} else if jobId == 124 {
+				found124Complete = true
+			} else {
+				foundOther = true
+				continue
+			}
+
+			assert.Contains(t, event.Attributes, "status")
+			status := event.Attributes["status"].(string)
+
+			assert.Equal(t, jobStatuses[jobId], status)
+
+			assert.Contains(t, event.Attributes, "submissionTime")
+            assert.Equal(
+            	t,
+            	jobSubmissionTimes[jobId],
+            	event.Attributes["submissionTime"],
+            )
+
+			assert.Contains(t, event.Attributes, "completionTime")
+            assert.Equal(
+            	t,
+            	futureTime.UnixMilli(),
+            	event.Attributes["completionTime"],
+            )
+
+			assert.Contains(t, event.Attributes, "completedStageCount")
 			assert.Equal(
 				t,
-				jobStatuses[metric.Attributes["sparkAppJobId"].(int)],
-				metric.Attributes["sparkAppJobStatus"],
+				jobCompletedStageCount[jobId],
+				event.Attributes["completedStageCount"],
 			)
 
-			// Verify metric name format
-			assert.True(
+			assert.Contains(t, event.Attributes, "completedTaskCount")
+			assert.Equal(
 				t,
-				strings.HasPrefix(metric.Name, "spark.app.job."),
-				"Metric name should start with 'spark.app.job.' but found: %s",
-				metric.Name,
+				jobCompletedTaskCount[jobId],
+				event.Attributes["completedTaskCount"],
+			)
+
+			assert.Contains(t, event.Attributes, "completedIndexCount")
+			assert.Equal(
+				t,
+				jobCompletedIndexCount[jobId],
+				event.Attributes["completedIndexCount"],
 			)
 		} else {
-			// Verify job status attribute
-			assert.Contains(t, metric.Attributes, "sparkAppJobStatus")
-			assert.Contains(
-				t,
-				[]string{"running", "lost", "succeeded", "failed"},
-				metric.Attributes["sparkAppJobStatus"],
-			)
-
-			if metric.Attributes["sparkAppJobStatus"] == "running" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-			} else if metric.Attributes["sparkAppJobStatus"] == "lost" {
-				assert.Equal(t, int64(0), metric.Value.Int())
-			} else if metric.Attributes["sparkAppJobStatus"] == "succeeded" {
-				assert.Equal(t, int64(2), metric.Value.Int())
-			} else if metric.Attributes["sparkAppJobStatus"] == "failed" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-			}
+			foundOther = true
 		}
 	}
 
-	// Verify a few metrics to ensure values are correctly passed
-	jobCompletedStages := map[int]int64{
-		123: 3,
-		124: 1,
-		125: 0,
-	}
-
-	jobCompletedTasks := map[int]int64{
-		123: 95,
-		124: 50,
-		125: 30,
-	}
-
-	jobCompletedIndices := map[int]int64{
-		123: 95,
-		124: 50,
-		125: 30,
-	}
-
-	stageCompletedMetricsFound := 0
-	taskCompletedMetricsFound := 0
-	jobIndicesCompletedMetricsFound := 0
-	jobsRunningFound := false
-	jobsLostFound := false
-	jobsSucceededFound := false
-	jobsFailedFound := false
-
-	for _, metric := range metrics {
-		if metric.Name == "spark.app.job.stages" &&
-			metric.Attributes["sparkAppStageStatus"] == "complete" {
-			// Verify the spark.app.job.stages metric with
-			// sparkAppStageStatus == "complete" for each job. There should be
-			// one for each job because we only run the collection once.
-			assert.Equal(
-				t,
-				jobCompletedStages[metric.Attributes["sparkAppJobId"].(int)],
-				metric.Value.Int(),
-			)
-
-			stageCompletedMetricsFound += 1
-		} else if metric.Name == "spark.app.job.tasks" &&
-			metric.Attributes["sparkAppTaskStatus"] == "complete" {
-			// Verify the spark.app.job.tasks metric with
-			// sparkAppTaskStatus == "complete" for each job. There should be
-			// one for each job because we only run the collection once.
-			assert.Equal(
-				t,
-				jobCompletedTasks[metric.Attributes["sparkAppJobId"].(int)],
-				metric.Value.Int(),
-			)
-
-			taskCompletedMetricsFound += 1
-		} else if metric.Name == "spark.app.job.indices.completed" {
-			// Verify the spark.app.job.indices.completed metric for
-			// each job. There should be one for each job because we only run
-			// the collection once.
-			assert.Equal(
-				t,
-				jobCompletedIndices[metric.Attributes["sparkAppJobId"].(int)],
-				metric.Value.Int(),
-			)
-
-			jobIndicesCompletedMetricsFound += 1
-		} else if metric.Name == "spark.app.jobs" {
-			// Verify the spark.app.jobs metric for each job status. There
-			// should be one for each job status.
-			if metric.Attributes["sparkAppJobStatus"] == "running" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-				jobsRunningFound = true
-			} else if metric.Attributes["sparkAppJobStatus"] == "lost" {
-				assert.Equal(t, int64(0), metric.Value.Int())
-				jobsLostFound = true
-			} else if metric.Attributes["sparkAppJobStatus"] == "succeeded" {
-				assert.Equal(t, int64(2), metric.Value.Int())
-				jobsSucceededFound = true
-			} else if metric.Attributes["sparkAppJobStatus"] == "failed" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-				jobsFailedFound = true
-			}
-		}
-	}
-
-	// Verify we saw everything we expected
-	assert.Equal(
-		t,
-		3,
-		stageCompletedMetricsFound,
-		"Expected 3 spark.app.job.stages metrics",
-	)
-
-    assert.Equal(
-    	t,
-    	3,
-    	taskCompletedMetricsFound,
-    	"Expected 3 spark.app.job.tasks metrics",
-    )
-
-    assert.Equal(
-    	t,
-    	3,
-    	jobIndicesCompletedMetricsFound,
-    	"Expected 3 spark.app.job.indices.completed metrics",
-    )
-
-    assert.True(
-    	t,
-    	jobsRunningFound,
-    	"Expected 1 spark.app.jobs metric with status 'running'",
-    )
-
-    assert.True(
-    	t,
-    	jobsLostFound,
-    	"Expected 0 spark.app.jobs metric with status 'lost'",
-    )
-
-    assert.True(
-    	t,
-    	jobsSucceededFound,
-    	"Expected 1 spark.app.jobs metric with status 'success'",
-    )
-
-	assert.True(
-		t,
-		jobsFailedFound,
-		"Expected 1 spark.app.jobs metric with status 'failed'",
-	)
-}
-
-func TestUpdateStageCounters_ActiveStage(t *testing.T) {
-	// Setup mock SparkStage with active status
-	stage := &SparkStage{
-		StageId: 123,
-		Name:    "Test Active Stage",
-		Status:  "active", // Status is "active"
-	}
-
-	// Setup stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.active,
-		"Should increment active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.pending,
-		"Should not change pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.complete,
-		"Should not change complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.skipped,
-		"Should not change skipped counter",
-	)
-}
-
-func TestUpdateStageCounters_PendingStage(t *testing.T) {
-	// Setup mock SparkStage with pending status
-	stage := &SparkStage{
-		StageId: 123,
-		Name:    "Test Pending Stage",
-		Status:  "pending", // Status is "pending"
-	}
-
-	// Setup stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.pending,
-		"Should increment pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.active,
-		"Should not change active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.complete,
-		"Should not change complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.skipped,
-		"Should not change skipped counter",
-	)
-}
-
-func TestUpdateStageCounters_CompleteStage(t *testing.T) {
-	// Setup mock SparkStage with complete status
-	stage := &SparkStage{
-		StageId: 123,
-		Name:    "Test Complete Stage",
-		Status:  "complete", // Status is "complete"
-	}
-
-	// Setup stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.complete,
-		"Should increment complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.active,
-		"Should not change active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.pending,
-		"Should not change pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.skipped,
-		"Should not change skipped counter",
-	)
-}
-
-func TestUpdateStageCounters_FailedStage(t *testing.T) {
-	// Setup mock SparkStage with failed status
-	stage := &SparkStage{
-		StageId: 101,
-		Name:    "Test Failed Stage",
-		Status:  "failed", // Status is "failed"
-	}
-
-	// Setup stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.failed,
-		"Should increment failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.active,
-		"Should not change active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.pending,
-		"Should not change pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.complete,
-		"Should not change complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.skipped,
-		"Should not change skipped counter",
-	)
-}
-
-func TestUpdateStageCounters_SkippedStage(t *testing.T) {
-	// Setup mock SparkStage with skipped status
-	stage := &SparkStage{
-		StageId: 130,
-		Name:    "Test Skipped Stage",
-		Status:  "skipped", // Status is "skipped"
-	}
-
-	// Seupt stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.skipped,
-		"Should increment skipped counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.active,
-		"Should not change active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.pending,
-		"Should not change pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.complete,
-		"Should not change complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-}
-
-func TestUpdateStageCounters_UnknownStatus(t *testing.T) {
-	// Setup mock SparkStage with an unrecognized status
-	stage := &SparkStage{
-		StageId: 130,
-		Name:    "Test Unknown Status Stage",
-		Status:  "unknown_status", // Status is not one of the recognized values
-	}
-
-	// Setup stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test
-	updateStageCounters(stage, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(0),
-		counters.active,
-		"Should not change active counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.pending,
-		"Should not change pending counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.complete,
-		"Should not change complete counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.failed,
-		"Should not change failed counter",
-	)
-
-	assert.Equal(
-		t,
-		int64(0),
-		counters.skipped,
-		"Should not change skipped counter",
-	)
-}
-
-func TestUpdateStageCounters_CaseInsensitivity(t *testing.T) {
-	// Setup various SparkStage instances with different case formats for
-	// status
-	stageActive := &SparkStage{
-		StageId: 126,
-		Name:    "Test Case Insensitivity - Active",
-		Status:  "ACTIVE", // Uppercase status
-	}
-
-	stagePending := &SparkStage{
-		StageId: 127,
-		Name:    "Test Case Insensitivity - Pending",
-		Status:  "Pending", // Title case status
-	}
-
-	stageComplete := &SparkStage{
-		StageId: 128,
-		Name:    "Test Case Insensitivity - Complete",
-		Status:  "cOmpLete", // Mixed case status
-	}
-
-	stageFailed := &SparkStage{
-		StageId: 129,
-		Name:    "Test Case Insensitivity - Failed",
-		Status:  "fAiLeD", // Mixed case status
-	}
-
-	stageSkipped := &SparkStage{
-		StageId: 130,
-		Name:    "Test Case Insensitivity - Skipped",
-		Status:  "SKIPPED", // Uppercase status
-	}
-
-	// Initialize stageCounters struct
-	counters := &stageCounters{
-		active:   0,
-		pending:  0,
-		complete: 0,
-		failed:   0,
-		skipped:  0,
-	}
-
-	// Execute the function under test for each stage
-	updateStageCounters(stageActive, counters)
-	updateStageCounters(stagePending, counters)
-	updateStageCounters(stageComplete, counters)
-	updateStageCounters(stageFailed, counters)
-	updateStageCounters(stageSkipped, counters)
-
-	// Verify results
-	assert.Equal(
-		t,
-		int64(1),
-		counters.active,
-		"Should increment active counter with uppercase ACTIVE",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.pending,
-		"Should increment pending counter with title case Pending",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.complete,
-		"Should increment complete counter with mixed case cOmpLete",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.failed,
-		"Should increment failed counter with mixed case fAiLeD",
-	)
-
-	assert.Equal(
-		t,
-		int64(1),
-		counters.skipped,
-		"Should increment skipped counter with uppercase SKIPPED",
-	)
+	// Verify we saw exactly the events we expected
+	assert.True(t, found122Complete)
+	assert.True(t, found123Start)
+	assert.True(t, found124Start)
+	assert.True(t, found124Complete)
+	assert.False(t, foundOther)
 }
 
 func TestCollectSparkAppStageMetrics_GetApplicationStagesError(t *testing.T) {
@@ -2352,13 +1866,22 @@ func TestCollectSparkAppStageMetrics_GetApplicationStagesError(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
 		Id:   "app-123456",
 		Name: "Test Spark App",
 	}
+
+	// Setup mock completedJobs
+	completedJobs := []SparkJob{}
 
 	// Track if GetApplicationStages was called
 	getApplicationStagesCalled := false
@@ -2378,33 +1901,28 @@ func TestCollectSparkAppStageMetrics_GetApplicationStagesError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 100) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 100) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppStageMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
+		completedJobs,
 		mockDecorator,
+		time.Now().UTC(),
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics to make sure the channel is empty
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events to make sure the channel is empty
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	assert.Error(t, err)
@@ -2414,7 +1932,7 @@ func TestCollectSparkAppStageMetrics_GetApplicationStagesError(t *testing.T) {
 		getApplicationStagesCalled,
 		"GetApplicationStages should be called",
 	)
-	assert.Empty(t, metrics, "No metrics should be received")
+	assert.Empty(t, events, "No events should be received")
 }
 
 func TestCollectSparkAppStageMetrics(t *testing.T) {
@@ -2422,7 +1940,27 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
+
+	// Setup times to be used to test behavior of event production based on
+	// lastRun time.
+	lastRun := now.UTC()
+	pastTime := lastRun.Add(-15 * time.Second)
+	pastTimeFormatted := pastTime.Format(RFC3339Milli)
+	futureTime := lastRun.Add(15 * time.Second)
+	futureTimeFormatted := futureTime.Format(RFC3339Milli)
+	launchTime := lastRun.Add(5 * time.Second)
+	launchTimeFormatted := launchTime.Format(RFC3339Milli)
 
 	// Create a mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -2430,11 +1968,154 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 		Name: "Test Spark App",
 	}
 
+	// Setup mock completedJobs for testing skipped stage functionality
+	completedJobs := []SparkJob{
+		{
+			JobId:               1,
+			Name:                "Test Job",
+			StageIds:            []int{11},
+		},
+	}
+
 	// Create mock stages with different statuses and mock values
 	mockStages := []SparkStage{
+		// Test stage start before / complete before
+		// This stage should produce no stage events since the stage was
+		// started before the last run and completed before the last run.
 		{
-			Status:                           "active",
-			StageId:                          1,
+			Status:                           "complete",
+            StageId:                          1,
+            AttemptId:                        0,
+            NumTasks:                         100,
+            NumActiveTasks:                   0,
+            NumCompleteTasks:                 100,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              50,
+			FirstTaskLaunchedTime:            pastTimeFormatted,
+			CompletionTime:                   pastTimeFormatted,
+			Name:                             "Test Stage Start Before / Complete Before",
+			Tasks: map[string]SparkTask{
+				// This task is designed to ensure the task processing logic
+				// does not run when it's parent stage completed before the last
+				// run. We do this by crafting a task with a launch time after
+				// the last run. Under normal circumstances, this task
+				// would produce a task launch event. By asserting that no task
+				// launch event with this task ID is produced, we can confirm
+				// that the task processing logic is skipped for this stage.
+				//
+				// NOTE: Practically this situation should not occur since we
+				// should never get a task that launched after the parent stage
+				// completed.
+				"1000": {
+					TaskId:       1000,
+					Index:        40,
+					Attempt:      0,
+					PartitionId:  40,
+					LaunchTime:   launchTimeFormatted,
+					Duration:     5000,
+					ExecutorId:   "executor-123",
+					Status:       "RUNNING",
+					TaskLocality: "NODE_LOCAL",
+					Speculative:  false,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            4500,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   1048576,
+						},
+					},
+				},
+			},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          8388608,
+			},
+			ShuffleMergersCount: 			  0,
+		},
+		// Test stage start before / complete empty
+		// This stage should produce no stage events since the stage was
+		// started before the last run and has not completed yet (because the
+		// completion time is empty).
+		{
+            Status:                           "active",
+            StageId:                          2,
+            AttemptId:                        0,
+            NumTasks:                         100,
+            NumActiveTasks:                   0,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   100,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			FirstTaskLaunchedTime:            pastTimeFormatted,
+            CompletionTime:                   "",
+			Name:                             "Test Stage Start Before / Complete Empty",
+			Tasks: map[string]SparkTask{
+				// Test task launch before / complete before
+				// This task should produce no task events since the task was
+				// launched before the last run and completed before the last
+				// run (because the task status is "SUCCESS" and the calculated
+				// completion time is before the last run).
+				"1001": {
+					TaskId:       1001,
+					Index:        41,
+					Attempt:      0,
+					PartitionId:  41,
+					LaunchTime:   pastTimeFormatted,
+					Duration:     5000,
+					ExecutorId:   "executor-123",
+					Status:       "SUCCESS",
+					TaskLocality: "NODE_LOCAL",
+					Speculative:  false,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            4500,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   1048576,
+						},
+					},
+				},
+				// Test task launch before / complete "empty"
+				// This task should produce no task events since the task was
+				// launched before the last run and has not completed yet
+				// (because the task status is "RUNNING").
+				"1002": {
+					TaskId:       1002,
+					Index:        42,
+					Attempt:      0,
+					PartitionId:  42,
+					LaunchTime:   pastTimeFormatted,
+					Duration:     10000,
+					ExecutorId:   "executor-123",
+					Status:       "RUNNING",
+					TaskLocality: "NODE_LOCAL",
+					Speculative:  false,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            4500,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   1048576,
+						},
+					},
+				},
+			},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          2097152,
+			},
+			ShuffleMergersCount:              0,
+        },
+        // Test stage start before / complete after
+        // This stage should produce no stage start event since the stage was
+		// started before the last run and should produce one stage complete
+		// event since the stage completed after the last run.
+		{
+			Status:                           "complete",
+			StageId:                          3,
 			AttemptId:                        0,
 			NumTasks:                         100,
 			NumActiveTasks:                   75,
@@ -2442,182 +2123,232 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 			NumFailedTasks:                   5,
 			NumKilledTasks:                   0,
 			NumCompletedIndices:              20,
-			PeakNettyDirectMemory:            1048576, // 1MB
-			PeakJvmDirectMemory:              2097152, // 2MB
-			PeakSparkDirectMemoryOverLimit:   0,
-			PeakTotalOffHeapMemory:           3145728, // 3MB
-			SubmissionTime:                   "2023-05-15T10:30:00.000GMT",
-			FirstTaskLaunchedTime:            "2023-05-15T10:30:05.000GMT",
-			CompletionTime:                   "", // Still active, no completion time
-			ExecutorDeserializeTime:          2500,
-			ExecutorDeserializeCpuTime:       2000,
-			ExecutorRunTime:                  15000,
-			ExecutorCpuTime:                  12000,
-			ResultSize:                       307200, // 300KB
-			JvmGcTime:                        1200,
-			ResultSerializationTime:          500,
-			MemoryBytesSpilled:               524288,   // 512KB
-			DiskBytesSpilled:                 1048576,  // 1MB
-			PeakExecutionMemory:              4194304,  // 4MB
-			InputBytes:                       10485760, // 10MB
-			InputRecords:                     50000,
-			OutputBytes:                      5242880, // 5MB
-			OutputRecords:                    25000,
-			ShuffleRemoteBlocksFetched:       500,
-			ShuffleLocalBlocksFetched:        1500,
-			ShuffleFetchWaitTime:             3000,
-			ShuffleRemoteBytesRead:           2097152, // 2MB
-			ShuffleRemoteBytesReadToDisk:     1048576, // 1MB
-			ShuffleLocalBytesRead:            3145728, // 3MB
-			ShuffleReadBytes:                 5242880, // 5MB
-			ShuffleReadRecords:               30000,
-			ShuffleCorruptMergedBlockChunks:  0,
-			ShuffleMergedFetchFallbackCount:  5,
-			ShuffleMergedRemoteBlocksFetched: 200,
-			ShuffleMergedLocalBlocksFetched:  800,
-			ShuffleMergedRemoteChunksFetched: 150,
-			ShuffleMergedLocalChunksFetched:  600,
-			ShuffleMergedRemoteBytesRead:     1048576, // 1MB
-			ShuffleMergedLocalBytesRead:      2097152, // 2MB
-			ShuffleRemoteReqsDuration:        4500,
-			ShuffleMergedRemoteReqsDuration:  2200,
-			ShuffleWriteBytes:                4194304, // 4MB
-			ShuffleWriteTime:                 3500,
-			ShuffleWriteRecords:              20000,
-			Name:                             "Active Stage",
-			SchedulingPool:                   "default",
+			FirstTaskLaunchedTime:            pastTimeFormatted,
+			CompletionTime:                   futureTimeFormatted,
+			Description:                      "This is job description 1",
+			Name:                             "Test Stage Start Before / Complete After",
+			Details:                          "This is test stage 3 details",
 			Tasks: map[string]SparkTask{
-				"0": {
-					TaskId:       1001,
-					Index:        42,
-					Attempt:      0,
-					PartitionId:  42,
-					LaunchTime:   "2023-05-15T10:30:10.000GMT",
-					Duration:     5000,
-					ExecutorId:   "executor-123",
-					Status:       "SUCCESS",
-					TaskLocality: "NODE_LOCAL",
-					Speculative:  false,
+				// Test task launch before / complete after
+				// This task should produce no task start event since the task
+				// was launched before the last run and should produce one task
+				// complete event since the task completed after the last run
+				// (because the task status is "FAILED" and the calculated
+				// completion time is after the last run).
+				"1003": {
+					TaskId:            1003,
+					Index:             43,
+					Attempt:           0,
+					PartitionId:       43,
+					LaunchTime:        pastTimeFormatted,
+					Duration:          20000,
+					ExecutorId:        "executor-123",
+					Status:            "FAILED",
+					TaskLocality:      "NODE_LOCAL",
+					Speculative:       false,
 					TaskMetrics: SparkTaskMetrics{
-						ExecutorDeserializeTime:    200,
-						ExecutorDeserializeCpuTime: 150,
-						ExecutorRunTime:            4500,
-						ExecutorCpuTime:            4000,
-						ResultSize:                 102400, // 100KB
-						JvmGcTime:                  300,
-						ResultSerializationTime:    100,
-						MemoryBytesSpilled:         51200,  // 50KB
-						DiskBytesSpilled:           102400, // 100KB
-						PeakExecutionMemory:        524288, // 512KB
+						ExecutorRunTime:            18000,
 						InputMetrics: struct {
 							BytesRead   int `json:"bytesRead"`
 							RecordsRead int `json:"recordsRead"`
 						}{
-							BytesRead:   1048576, // 1MB
-							RecordsRead: 50000,
+							BytesRead:   2097152,
 						},
-						OutputMetrics: struct {
-							BytesWritten   int `json:"bytesWritten"`
-							RecordsWritten int `json:"recordsWritten"`
-						}{
-							BytesWritten:   5242880, // 5MB
-							RecordsWritten: 25000,
-						},
-						ShuffleReadMetrics: struct {
-							RemoteBlocksFetched   int `json:"remoteBlocksFetched"`
-							LocalBlocksFetched    int `json:"localBlocksFetched"`
-							FetchWaitTime         int `json:"fetchWaitTime"`
-							RemoteBytesRead       int `json:"remoteBytesRead"`
-							RemoteBytesReadToDisk int `json:"remoteBytesReadToDisk"`
-							LocalBytesRead        int `json:"localBytesRead"`
-							RecordsRead           int `json:"recordsRead"`
-							RemoteReqsDuration    int `json:"remoteReqsDuration"`
-							SufflePushReadMetrics struct {
-								CorruptMergedBlockChunks  int `json:"corruptMergedBlockChunks"`
-								MergedFetchFallbackCount  int `json:"mergedFetchFallbackCount"`
-								RemoteMergedBlocksFetched int `json:"remoteMergedBlocksFetched"`
-								LocalMergedBlocksFetched  int `json:"localMergedBlocksFetched"`
-								RemoteMergedChunksFetched int `json:"remoteMergedChunksFetched"`
-								LocalMergedChunksFetched  int `json:"localMergedChunksFetched"`
-								RemoteMergedBytesRead     int `json:"remoteMergedBytesRead"`
-								LocalMergedBytesRead      int `json:"localMergedBytesRead"`
-								RemoteMergedReqsDuration  int `json:"remoteMergedReqsDuration"`
-							} `json:"shufflePushReadMetrics"`
-						}{
-							RemoteBlocksFetched:   50,
-							LocalBlocksFetched:    150,
-							FetchWaitTime:         400,
-							RemoteBytesRead:       102400, // 100KB
-							RemoteBytesReadToDisk: 51200,  // 50KB
-							LocalBytesRead:        153600, // 150KB
-							RecordsRead:           5000,
-							RemoteReqsDuration:    600,
-							SufflePushReadMetrics: struct {
-								CorruptMergedBlockChunks  int `json:"corruptMergedBlockChunks"`
-								MergedFetchFallbackCount  int `json:"mergedFetchFallbackCount"`
-								RemoteMergedBlocksFetched int `json:"remoteMergedBlocksFetched"`
-								LocalMergedBlocksFetched  int `json:"localMergedBlocksFetched"`
-								RemoteMergedChunksFetched int `json:"remoteMergedChunksFetched"`
-								LocalMergedChunksFetched  int `json:"localMergedChunksFetched"`
-								RemoteMergedBytesRead     int `json:"remoteMergedBytesRead"`
-								LocalMergedBytesRead      int `json:"localMergedBytesRead"`
-								RemoteMergedReqsDuration  int `json:"remoteMergedReqsDuration"`
-							}{
-								CorruptMergedBlockChunks:  0,
-								MergedFetchFallbackCount:  2,
-								RemoteMergedBlocksFetched: 20,
-								LocalMergedBlocksFetched:  80,
-								RemoteMergedChunksFetched: 15,
-								LocalMergedChunksFetched:  60,
-								RemoteMergedBytesRead:     51200,  // 50KB
-								LocalMergedBytesRead:      102400, // 100KB
-								RemoteMergedReqsDuration:  300,
-							},
-						},
-						ShuffleWriteMetrics: struct {
-							BytesWritten   int `json:"bytesWritten"`
-							WriteTime      int `json:"writeTime"`
-							RecordsWritten int `json:"recordsWritten"`
-						}{
-							BytesWritten:   5242880, // 5MB
-							WriteTime:      3500,
-							RecordsWritten: 25000,
-						},
-						PhotonMemoryMetrics: struct {
-							OffHeapMinMemorySize          int `json:"offHeapMinMemorySize"`
-							OffHeapMaxMemorySize          int `json:"offHeapMaxMemorySize"`
-							PhotonBufferPoolMinMemorySize int `json:"photonBufferPoolMinMemorySize"`
-							PhotonBufferPoolMaxMemorySize int `json:"photonBufferPoolMaxMemorySize"`
-						}{
-							OffHeapMinMemorySize:          4194304, // 4MB
-							OffHeapMaxMemorySize:          8388608, // 8MB
-							PhotonBufferPoolMinMemorySize: 262144,  // 256KB
-							PhotonBufferPoolMaxMemorySize: 524288,  // 512KB
-						},
-						PhotonizedTaskTimeNs: 4000000000, // 4 seconds in nanoseconds
+						SnapStartedTaskCount: 1,
 					},
-					SchedulerDelay:    300,
-					GettingResultTime: 200,
+					SchedulerDelay:    5000,
+					GettingResultTime: 8000,
 				},
 			},
-			ExecutorSummary:   map[string]SparkExecutorSummary{},
-			ResourceProfileId: 0,
 			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
-				JVMHeapMemory:          8388608, // 8MB
-				JVMOffHeapMemory:       4194304, // 4MB
-				OnHeapExecutionMemory:  2097152, // 2MB
-				OffHeapExecutionMemory: 1048576, // 1MB
-				OnHeapStorageMemory:    3145728, // 3MB
-				OffHeapStorageMemory:   1572864, // 1.5MB
-				DirectPoolMemory:       524288,  // 512KB
-				MappedPoolMemory:       262144,  // 256KB
-				TotalOffHeapMemory:     6291456, // 6MB
+				JVMHeapMemory:          2097152,
 			},
 			ShuffleMergersCount: 2,
 		},
+		// Test stage start after complete empty
+        // This stage should produce one stage start event since the stage was
+		// started after the last run and should produce no stage complete
+		// event since the stage has not completed yet (because the completion
+		// time is empty).
 		{
-			Status:                           "pending",
-			StageId:                          2,
+			Status:                           "active",
+            StageId:                          4,
+            AttemptId:                        1,
+            NumTasks:                         80,
+            NumActiveTasks:                   80,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			FirstTaskLaunchedTime:            futureTimeFormatted,
+			CompletionTime: 				  "",
+			Description:                      "This is job description 2",
+			Name:                             "Test Stage Start After / Complete Empty",
+			Details:                          "This is test stage 4 details",
+			Tasks: map[string]SparkTask{
+				// Test task launch after / complete "empty"
+				// This task should produce one task start event since the task
+				// was launched after the last run and should produce no task
+				// complete event (because the task status is "RUNNING").
+				"1004": {
+					TaskId:       1004,
+					Index:        44,
+					Attempt:      2,
+					PartitionId:  44,
+					LaunchTime:   launchTimeFormatted,
+					Duration:     10000,
+					ExecutorId:   "executor-123",
+					Status:       "RUNNING",
+					TaskLocality: "NODE_LOCAL",
+					Speculative:  false,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            4500,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   1048576,
+						},
+					},
+				},
+			},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 2,
+		},
+		// Test stage start after complete after
+		// This stage should produce one stage start event since the stage was
+		// started after the last run and should produce one stage complete
+		// event since the stage completed after the last run.
+		{
+			Status:                           "complete",
+			StageId:                          5,
+			AttemptId:                        2,
+			NumTasks:                         120,
+			NumActiveTasks:                   0,
+			NumCompleteTasks:                 115,
+			NumCompletedIndices:              115,
+			FirstTaskLaunchedTime:            futureTimeFormatted,
+			CompletionTime:                   futureTimeFormatted,
+			Description:                      "This is job description 3",
+			Name:                             "Test Stage Start After / Complete After",
+			// This is a long string to test the truncation of the Details field
+			Details:                          strings.Repeat("0", 5000),
+			Tasks: map[string]SparkTask{
+				// Test task launch after / complete after
+				// This task should produce one task start event since the task
+				// was launched after the last run and should produce one task
+				// complete event since the task completed after the last run
+				// (because the task status is "SUCCESS" and the calculated
+				// completion time is after the last run).
+				"1005": {
+					TaskId:            1005,
+					Index:             45,
+					Attempt:           1,
+					PartitionId:       45,
+					LaunchTime:        launchTimeFormatted,
+					Duration:          10000,
+					ExecutorId:        "executor-456",
+					Status:            "SUCCESS",
+					TaskLocality:      "RACK_LOCAL",
+					Speculative:       true,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            18000,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   1048576,
+						},
+						SnapStartedTaskCount: 2,
+					},
+					SchedulerDelay:    3000,
+					GettingResultTime: 10000,
+				},
+				// Test task empty launch time
+				// This task should produce no events since it has an empty
+				// launch time.
+				//
+				// NOTE: Technically, we can't tell the difference externally
+				// from the function between an empty launch time and an invalid
+				// launch time. We just know both should have the same result
+				// which is that no events are produced. But since we don't want
+				// either condition to return an error (because we want to
+				// continue processing other tasks and stages), I'm not sure how
+				// we test to distinguish between between the two cases. For now
+				// we'll assume it's good enough to verify neither produces
+				// events.
+				"1006": {
+					TaskId:       1006,
+					Index:        46,
+					Attempt:      0,
+					PartitionId:  46,
+					LaunchTime:   "",
+					Duration:     7500,
+					ExecutorId:   "executor-456",
+					Status:       "RUNNING",
+					TaskLocality: "RACK_LOCAL",
+					Speculative:  true,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            7000,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   2097152,
+							RecordsRead: 75000,
+						},
+					},
+				},
+				// Test task invalid launch time
+				// This task should produce no events since it has an invalid
+				// launch time.
+				//
+				// NOTE: See note above.
+				"1007": {
+					TaskId:       1007,
+					Index:        47,
+					Attempt:      0,
+					PartitionId:  47,
+					LaunchTime:   "invalid_launch_time",
+					Duration:     7500,
+					ExecutorId:   "executor-456",
+					Status:       "RUNNING",
+					TaskLocality: "RACK_LOCAL",
+					Speculative:  true,
+					TaskMetrics: SparkTaskMetrics{
+						ExecutorRunTime:            7000,
+						InputMetrics: struct {
+							BytesRead   int `json:"bytesRead"`
+							RecordsRead int `json:"recordsRead"`
+						}{
+							BytesRead:   2097152,
+							RecordsRead: 75000,
+						},
+					},
+				},
+			},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 3,
+		},
+		// Test stage empty first task launched time
+		// This stage should produce no events since it has an empty
+		// first task launched time.
+		//
+		// NOTE: Technically, we can't tell the difference externally from the
+		// function between an empty first task launched time and an invalid
+		// first task launched time. We just know both should have the same
+		// result which is that no events are produced. But since we don't want
+		// either condition to return an error (because we want to continue
+		// processing other stages), I'm not sure how we test to distinguish
+		// between the two cases. For now, we'll assume it's good enough to
+		// verify neither produces events.
+		{
+			Status:                           "unknown",
+			StageId:                          6,
 			AttemptId:                        0,
 			NumTasks:                         80,
 			NumActiveTasks:                   0,
@@ -2625,308 +2356,152 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 			NumFailedTasks:                   0,
 			NumKilledTasks:                   0,
 			NumCompletedIndices:              0,
-			PeakNettyDirectMemory:            0,
-			PeakJvmDirectMemory:              0,
-			PeakSparkDirectMemoryOverLimit:   0,
-			PeakTotalOffHeapMemory:           0,
-			SubmissionTime:                   "2023-05-15T10:35:00.000GMT",
-			FirstTaskLaunchedTime:            "", // Not launched yet
-			CompletionTime:                   "", // Not completed
-			ExecutorDeserializeTime:          0,
-			ExecutorDeserializeCpuTime:       0,
-			ExecutorRunTime:                  0,
-			ExecutorCpuTime:                  0,
-			ResultSize:                       0,
-			JvmGcTime:                        0,
-			ResultSerializationTime:          0,
-			MemoryBytesSpilled:               0,
-			DiskBytesSpilled:                 0,
-			PeakExecutionMemory:              0,
-			InputBytes:                       0,
-			InputRecords:                     0,
-			OutputBytes:                      0,
-			OutputRecords:                    0,
-			ShuffleRemoteBlocksFetched:       0,
-			ShuffleLocalBlocksFetched:        0,
-			ShuffleFetchWaitTime:             0,
-			ShuffleRemoteBytesRead:           0,
-			ShuffleRemoteBytesReadToDisk:     0,
-			ShuffleLocalBytesRead:            0,
-			ShuffleReadBytes:                 0,
-			ShuffleReadRecords:               0,
-			ShuffleCorruptMergedBlockChunks:  0,
-			ShuffleMergedFetchFallbackCount:  0,
-			ShuffleMergedRemoteBlocksFetched: 0,
-			ShuffleMergedLocalBlocksFetched:  0,
-			ShuffleMergedRemoteChunksFetched: 0,
-			ShuffleMergedLocalChunksFetched:  0,
-			ShuffleMergedRemoteBytesRead:     0,
-			ShuffleMergedLocalBytesRead:      0,
-			ShuffleRemoteReqsDuration:        0,
-			ShuffleMergedRemoteReqsDuration:  0,
-			ShuffleWriteBytes:                0,
-			ShuffleWriteTime:                 0,
-			ShuffleWriteRecords:              0,
-			Name:                             "Pending Stage",
-			SchedulingPool:                   "default",
-			Tasks:                            map[string]SparkTask{},
-			ExecutorSummary:                  map[string]SparkExecutorSummary{},
-			ResourceProfileId:                0,
-			PeakExecutorMetrics:              SparkExecutorPeakMemoryMetrics{},
-			ShuffleMergersCount:              0,
-		},
-		{
-			Status:                           "complete",
-			StageId:                          3,
-			AttemptId:                        0,
-			NumTasks:                         120,
-			NumActiveTasks:                   0,
-			NumCompleteTasks:                 115,
-			NumFailedTasks:                   3,
-			NumKilledTasks:                   2,
-			NumCompletedIndices:              115,
-			PeakNettyDirectMemory:            2097152, // 2MB
-			PeakJvmDirectMemory:              3145728, // 3MB
-			PeakSparkDirectMemoryOverLimit:   0,
-			PeakTotalOffHeapMemory:           5242880, // 5MB
-			SubmissionTime:                   "2023-05-15T10:20:00.000GMT",
-			FirstTaskLaunchedTime:            "2023-05-15T10:20:05.000GMT",
-			CompletionTime:                   "2023-05-15T10:25:30.000GMT",
-			ExecutorDeserializeTime:          3000,
-			ExecutorDeserializeCpuTime:       2500,
-			ExecutorRunTime:                  320000,
-			ExecutorCpuTime:                  280000,
-			ResultSize:                       1048576, // 1MB
-			JvmGcTime:                        5000,
-			ResultSerializationTime:          1500,
-			MemoryBytesSpilled:               2097152,  // 2MB
-			DiskBytesSpilled:                 4194304,  // 4MB
-			PeakExecutionMemory:              8388608,  // 8MB
-			InputBytes:                       20971520, // 20MB
-			InputRecords:                     100000,
-			OutputBytes:                      10485760, // 10MB
-			OutputRecords:                    50000,
-			ShuffleRemoteBlocksFetched:       1200,
-			ShuffleLocalBlocksFetched:        3000,
-			ShuffleFetchWaitTime:             8000,
-			ShuffleRemoteBytesRead:           5242880,  // 5MB
-			ShuffleRemoteBytesReadToDisk:     2097152,  // 2MB
-			ShuffleLocalBytesRead:            8388608,  // 8MB
-			ShuffleReadBytes:                 13631488, // 13MB
-			ShuffleReadRecords:               75000,
-			ShuffleCorruptMergedBlockChunks:  0,
-			ShuffleMergedFetchFallbackCount:  10,
-			ShuffleMergedRemoteBlocksFetched: 500,
-			ShuffleMergedLocalBlocksFetched:  1500,
-			ShuffleMergedRemoteChunksFetched: 400,
-			ShuffleMergedLocalChunksFetched:  1200,
-			ShuffleMergedRemoteBytesRead:     3145728, // 3MB
-			ShuffleMergedLocalBytesRead:      6291456, // 6MB
-			ShuffleRemoteReqsDuration:        12000,
-			ShuffleMergedRemoteReqsDuration:  6000,
-			ShuffleWriteBytes:                9437184, // 9MB
-			ShuffleWriteTime:                 7500,
-			ShuffleWriteRecords:              45000,
-			Name:                             "Complete Stage",
-			SchedulingPool:                   "default",
-			Tasks: map[string]SparkTask{
-				"0": {
-					TaskId:       1002,
-					Index:        43,
-					Attempt:      1, // This is a retry attempt
-					PartitionId:  43,
-					LaunchTime:   "2023-05-15T10:30:15.000GMT",
-					Duration:     7500, // Longer duration
-					ExecutorId:   "executor-456",
-					Status:       "RUNNING",    // Different status
-					TaskLocality: "RACK_LOCAL", // Different locality
-					Speculative:  true,         // Speculative execution
-					TaskMetrics: SparkTaskMetrics{
-						ExecutorDeserializeTime:    250,
-						ExecutorDeserializeCpuTime: 200,
-						ExecutorRunTime:            7000,
-						ExecutorCpuTime:            6500,
-						ResultSize:                 204800, // 200KB
-						JvmGcTime:                  450,
-						ResultSerializationTime:    180,
-						MemoryBytesSpilled:         102400,  // 100KB
-						DiskBytesSpilled:           204800,  // 200KB
-						PeakExecutionMemory:        1048576, // 1MB
-						InputMetrics: struct {
-							BytesRead   int `json:"bytesRead"`
-							RecordsRead int `json:"recordsRead"`
-						}{
-							BytesRead:   2097152, // 2MB
-							RecordsRead: 75000,
-						},
-						OutputMetrics: struct {
-							BytesWritten   int `json:"bytesWritten"`
-							RecordsWritten int `json:"recordsWritten"`
-						}{
-							BytesWritten:   3145728, // 3MB
-							RecordsWritten: 15000,
-						},
-						ShuffleReadMetrics: struct {
-							RemoteBlocksFetched   int `json:"remoteBlocksFetched"`
-							LocalBlocksFetched    int `json:"localBlocksFetched"`
-							FetchWaitTime         int `json:"fetchWaitTime"`
-							RemoteBytesRead       int `json:"remoteBytesRead"`
-							RemoteBytesReadToDisk int `json:"remoteBytesReadToDisk"`
-							LocalBytesRead        int `json:"localBytesRead"`
-							RecordsRead           int `json:"recordsRead"`
-							RemoteReqsDuration    int `json:"remoteReqsDuration"`
-							SufflePushReadMetrics struct {
-								CorruptMergedBlockChunks  int `json:"corruptMergedBlockChunks"`
-								MergedFetchFallbackCount  int `json:"mergedFetchFallbackCount"`
-								RemoteMergedBlocksFetched int `json:"remoteMergedBlocksFetched"`
-								LocalMergedBlocksFetched  int `json:"localMergedBlocksFetched"`
-								RemoteMergedChunksFetched int `json:"remoteMergedChunksFetched"`
-								LocalMergedChunksFetched  int `json:"localMergedChunksFetched"`
-								RemoteMergedBytesRead     int `json:"remoteMergedBytesRead"`
-								LocalMergedBytesRead      int `json:"localMergedBytesRead"`
-								RemoteMergedReqsDuration  int `json:"remoteMergedReqsDuration"`
-							} `json:"shufflePushReadMetrics"`
-						}{
-							RemoteBlocksFetched:   120,
-							LocalBlocksFetched:    80,
-							FetchWaitTime:         750,
-							RemoteBytesRead:       524288, // 512KB
-							RemoteBytesReadToDisk: 262144, // 256KB
-							LocalBytesRead:        307200, // 300KB
-							RecordsRead:           8000,
-							RemoteReqsDuration:    900,
-							SufflePushReadMetrics: struct {
-								CorruptMergedBlockChunks  int `json:"corruptMergedBlockChunks"`
-								MergedFetchFallbackCount  int `json:"mergedFetchFallbackCount"`
-								RemoteMergedBlocksFetched int `json:"remoteMergedBlocksFetched"`
-								LocalMergedBlocksFetched  int `json:"localMergedBlocksFetched"`
-								RemoteMergedChunksFetched int `json:"remoteMergedChunksFetched"`
-								LocalMergedChunksFetched  int `json:"localMergedChunksFetched"`
-								RemoteMergedBytesRead     int `json:"remoteMergedBytesRead"`
-								LocalMergedBytesRead      int `json:"localMergedBytesRead"`
-								RemoteMergedReqsDuration  int `json:"remoteMergedReqsDuration"`
-							}{
-								CorruptMergedBlockChunks:  1, // Has a corruption
-								MergedFetchFallbackCount:  5,
-								RemoteMergedBlocksFetched: 40,
-								LocalMergedBlocksFetched:  60,
-								RemoteMergedChunksFetched: 35,
-								LocalMergedChunksFetched:  45,
-								RemoteMergedBytesRead:     153600, // 150KB
-								LocalMergedBytesRead:      204800, // 200KB
-								RemoteMergedReqsDuration:  550,
-							},
-						},
-						ShuffleWriteMetrics: struct {
-							BytesWritten   int `json:"bytesWritten"`
-							WriteTime      int `json:"writeTime"`
-							RecordsWritten int `json:"recordsWritten"`
-						}{
-							BytesWritten:   8388608, // 8MB
-							WriteTime:      5000,
-							RecordsWritten: 40000,
-						},
-						PhotonMemoryMetrics: struct {
-							OffHeapMinMemorySize          int `json:"offHeapMinMemorySize"`
-							OffHeapMaxMemorySize          int `json:"offHeapMaxMemorySize"`
-							PhotonBufferPoolMinMemorySize int `json:"photonBufferPoolMinMemorySize"`
-							PhotonBufferPoolMaxMemorySize int `json:"photonBufferPoolMaxMemorySize"`
-						}{
-							OffHeapMinMemorySize:          6291456,  // 6MB
-							OffHeapMaxMemorySize:          12582912, // 12MB
-							PhotonBufferPoolMinMemorySize: 524288,   // 512KB
-							PhotonBufferPoolMaxMemorySize: 1048576,  // 1MB
-						},
-						PhotonizedTaskTimeNs: 6500000000, // 6.5 seconds in nanoseconds
-					},
-					SchedulerDelay:    450,
-					GettingResultTime: 350,
-				},
-			},
-			ExecutorSummary:   map[string]SparkExecutorSummary{},
-			ResourceProfileId: 0,
+			FirstTaskLaunchedTime:            "",
+			CompletionTime:                   "",
 			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
-				JVMHeapMemory:          4194304, // 4MB
-				JVMOffHeapMemory:       4194304, // 4MB
-				OnHeapExecutionMemory:  2097152, // 2MB
-				OffHeapExecutionMemory: 1048576, // 1MB
-				OnHeapStorageMemory:    3145728, // 3MB
-				OffHeapStorageMemory:   1572864, // 1.5MB
-				DirectPoolMemory:       524288,  // 512KB
-				MappedPoolMemory:       262144,  // 256KB
-				TotalOffHeapMemory:     6291456, // 6MB
+				JVMHeapMemory:          1048576,
 			},
-			ShuffleMergersCount: 3,
+			ShuffleMergersCount: 4,
 		},
+		// Test stage invalid first task launched time
+		// This stage should produce no events since it has an invalid
+		// first task launched time.
+		//
+		// NOTE: See note above.
 		{
 			Status:                           "complete",
-			StageId:                          4,
+			StageId:                          7,
+			AttemptId:                        0,
+			NumTasks:                         80,
+			NumActiveTasks:                   0,
+			NumCompleteTasks:                 0,
+			NumFailedTasks:                   0,
+			NumKilledTasks:                   0,
+			NumCompletedIndices:              0,
+			FirstTaskLaunchedTime:            "invalid_first_task_launched_time",
+			CompletionTime:                   futureTimeFormatted,
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 4,
+		},
+		// Test stage invalid completion time
+		// This stage should produce no events since it has an invalid
+		// completion time.
+		{
+			Status:                           "complete",
+			StageId:                          8,
 			AttemptId:                        0,
 			NumTasks:                         120,
 			NumActiveTasks:                   0,
-			NumCompleteTasks:                 115,
+			NumCompleteTasks:                 80,
 			NumFailedTasks:                   3,
 			NumKilledTasks:                   2,
-			NumCompletedIndices:              115,
-			PeakNettyDirectMemory:            2097152, // 2MB
-			PeakJvmDirectMemory:              3145728, // 3MB
-			PeakSparkDirectMemoryOverLimit:   0,
-			PeakTotalOffHeapMemory:           5242880, // 5MB
-			SubmissionTime:                   "2023-05-15T10:20:00.000GMT",
-			FirstTaskLaunchedTime:            "2023-05-15T10:20:05.000GMT",
+			NumCompletedIndices:              90,
+			FirstTaskLaunchedTime:            pastTimeFormatted,
 			CompletionTime:                   "invalid_completion_time",
-			ExecutorDeserializeTime:          3000,
-			ExecutorDeserializeCpuTime:       2500,
-			ExecutorRunTime:                  320000,
-			ExecutorCpuTime:                  280000,
-			ResultSize:                       1048576, // 1MB
-			JvmGcTime:                        5000,
-			ResultSerializationTime:          1500,
-			MemoryBytesSpilled:               2097152,  // 2MB
-			DiskBytesSpilled:                 4194304,  // 4MB
-			PeakExecutionMemory:              8388608,  // 8MB
-			InputBytes:                       20971520, // 20MB
-			InputRecords:                     100000,
-			OutputBytes:                      10485760, // 10MB
-			OutputRecords:                    50000,
-			ShuffleRemoteBlocksFetched:       1200,
-			ShuffleLocalBlocksFetched:        3000,
-			ShuffleFetchWaitTime:             8000,
-			ShuffleRemoteBytesRead:           5242880,  // 5MB
-			ShuffleRemoteBytesReadToDisk:     2097152,  // 2MB
-			ShuffleLocalBytesRead:            8388608,  // 8MB
-			ShuffleReadBytes:                 13631488, // 13MB
-			ShuffleReadRecords:               75000,
-			ShuffleCorruptMergedBlockChunks:  0,
-			ShuffleMergedFetchFallbackCount:  10,
-			ShuffleMergedRemoteBlocksFetched: 500,
-			ShuffleMergedLocalBlocksFetched:  1500,
-			ShuffleMergedRemoteChunksFetched: 400,
-			ShuffleMergedLocalChunksFetched:  1200,
-			ShuffleMergedRemoteBytesRead:     3145728, // 3MB
-			ShuffleMergedLocalBytesRead:      6291456, // 6MB
-			ShuffleRemoteReqsDuration:        12000,
-			ShuffleMergedRemoteReqsDuration:  6000,
-			ShuffleWriteBytes:                9437184, // 9MB
-			ShuffleWriteTime:                 7500,
-			ShuffleWriteRecords:              45000,
-			Name:                             "Complete Stage Invalid Completion Time",
-			SchedulingPool:                   "default",
-			Tasks:                            map[string]SparkTask{},
-			ExecutorSummary:                  map[string]SparkExecutorSummary{},
-			ResourceProfileId:                0,
 			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
-				JVMHeapMemory:          8388608, // 8MB
-				JVMOffHeapMemory:       4194304, // 4MB
-				OnHeapExecutionMemory:  2097152, // 2MB
-				OffHeapExecutionMemory: 1048576, // 1MB
-				OnHeapStorageMemory:    3145728, // 3MB
-				OffHeapStorageMemory:   1572864, // 1.5MB
-				DirectPoolMemory:       524288,  // 512KB
-				MappedPoolMemory:       262144,  // 256KB
-				TotalOffHeapMemory:     6291456, // 6MB
+				JVMHeapMemory:          1048576,
 			},
-			ShuffleMergersCount: 3,
+			ShuffleMergersCount: 5,
+		},
+		// Test stage valid submission time
+        // This stage should produce one stage start event since the stage was
+		// started after the last run and should produce no stage complete
+		// event since the stage has not completed yet (because the completion
+		// time is empty). The stage start event should have a valid submission
+		// time.
+		{
+			Status:                           "active",
+            StageId:                          9,
+            AttemptId:                        0,
+            NumTasks:                         80,
+            NumActiveTasks:                   80,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			SubmissionTime:                   futureTimeFormatted,
+			FirstTaskLaunchedTime:            futureTimeFormatted,
+			CompletionTime: 				  "",
+			Description:                      "This is job description 4",
+			Name:                             "Test Stage Valid Submission Time",
+			Details:                          "This is test stage 9 details",
+			Tasks: map[string]SparkTask{},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 2,
+		},
+		// Test stage after complete before
+        // This stage is specifically designed to test the case where a stage
+		// has a first task launched time after the last run but a completion
+		// time before the last run. Practically this should never happen since
+		// we should never get a stage that starts after it completes, but we
+		// want to ensure our logic handles this case gracefully. We test this
+		// by ensuring that this stage generates no events.
+		{
+			Status:                           "active",
+            StageId:                          10,
+            AttemptId:                        0,
+            NumTasks:                         80,
+            NumActiveTasks:                   80,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			FirstTaskLaunchedTime:            futureTimeFormatted,
+			CompletionTime: 				  pastTimeFormatted,
+			Name:                             "Test Stage Start After / Complete Before",
+			Tasks: map[string]SparkTask{},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 2,
+		},
+		// Test skipped stage that is part of a completed job
+        // This stage should produce one stage complete event since the stage
+		// was skipped and is part of the completedJobs list. This stage should
+		// have no submission, first task launched, or completion time and
+		// should only have status and taskCount attributes.
+		{
+			Status:                           "skipped",
+            StageId:                          11,
+            AttemptId:                        0,
+            NumTasks:                         3,
+            NumActiveTasks:                   0,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			Description:                      "This is job description 5",
+			Name:                             "Test Include Skipped Stage",
+			Details:                          "This is test stage 11 details",
+			Tasks: map[string]SparkTask{},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          1048576,
+			},
+			ShuffleMergersCount: 0,
+		},
+		// Test skipped stage that is not part of a completed job
+        // This stage should produce no events since it is not part of the
+		// completedJobs list.
+		{
+			Status:                           "skipped",
+            StageId:                          12,
+            AttemptId:                        0,
+            NumTasks:                         3,
+            NumActiveTasks:                   0,
+            NumCompleteTasks:                 0,
+            NumFailedTasks:                   0,
+            NumKilledTasks:                   0,
+            NumCompletedIndices:              0,
+			Name:                             "Test Exclude Skipped Stage",
+			Tasks: map[string]SparkTask{},
+			PeakExecutorMetrics: SparkExecutorPeakMemoryMetrics{
+				JVMHeapMemory:          0,
+			},
+			ShuffleMergersCount: 0,
 		},
 	}
 
@@ -2940,308 +2515,661 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 		return mockStages, nil
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 1000) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 1000) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppStageMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
+		completedJobs,
 		mockDecorator,
+		lastRun,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics for verification
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events for verification
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.NoError(t, err)
-	assert.NotEmpty(t, metrics, "Should have received metrics")
+	assert.NotEmpty(t, events, "Should have received events")
+	assert.Equal(t, 10, len(events), "Should have received ten events")
+
+	validEventTypes := []string{"SparkStage", "SparkTask"}
+	validEvents := []string{"start", "complete"}
+
+	stageIds := []int{3, 4, 5, 9, 11}
+
+	stageJobDescriptions := map[int]string{
+		3: "This is job description 1",
+		4: "This is job description 2",
+		5: "This is job description 3",
+		9: "This is job description 4",
+		11: "This is job description 5",
+	}
 
 	stageNames := map[int]string{
-		1: "Active Stage",
-        2: "Pending Stage",
-		3: "Complete Stage",
+		3: "Test Stage Start Before / Complete After",
+        4: "Test Stage Start After / Complete Empty",
+		5: "Test Stage Start After / Complete After",
+		9: "Test Stage Valid Submission Time",
+		11: "Test Include Skipped Stage",
     }
 
-	stageStatuses := map[int]string{
-		1: "active",
-		2: "pending",
+	stageDetails := map[int]string{
+		3: "This is test stage 3 details",
+		4: "This is test stage 4 details",
+		// We generated a string greater than 4096 characters to test
+		// truncation of the Details field. The result should be trimmed to
+		// 4096 characters.
+		5: strings.Repeat("0", 4096),
+		9: "This is test stage 9 details",
+		11: "This is test stage 11 details",
+	}
+
+	stageAttemptIds := map[int]int{
+		3: 0,
+		4: 1,
+		5: 2,
+		9: 0,
+		11: 0,
+	}
+
+	stageFirstTaskLaunchedTimes := map[int]int64{
+		3: pastTime.UnixMilli(),
+		4: futureTime.UnixMilli(),
+		5: futureTime.UnixMilli(),
+		9: futureTime.UnixMilli(),
+	}
+
+	stageCompletionTimes := map[int]int64{
+		3: futureTime.UnixMilli(),
+		5: futureTime.UnixMilli(),
+	}
+
+	stageCompleteEventStatuses := map[int]string{
 		3: "complete",
+		5: "complete",
 	}
 
-	stageTaskExecutorIds := map[int]string{
-		1001: "executor-123",
-		1002: "executor-456",
-    }
-
-	stageTaskStatuses := map[int]string{
-		1001: "success",
-        1002: "running",
-    }
-
-	stageTaskLocalities := map[int]string{
-		1001: "NODE_LOCAL",
-        1002: "RACK_LOCAL",
-    }
-
-	stageTaskSpeculativeFlags := map[int]bool{
-		1001: false,
-        1002: true,
-    }
-
-	stageTaskAttempts := map[int]int{
-		1001: 0,
-		1002: 1,
+	stageDurations := map[int]int64{
+		3: 30000,
+		5: 0,
 	}
 
-	// Verify that all metrics have the expected attributes
-	for _, metric := range metrics {
-		assert.NotNil(t, metric.Attributes)
+	stageCompletedTaskCounts := map[int]int{
+		3: 20,
+		5: 115,
+	}
+
+	stageCompletedIndexCounts := map[int]int{
+		3: 20,
+		5: 115,
+	}
+
+	stageJvmHeapPeakMemoryUsedBytes := map[int]int{
+		3: 2097152,
+		5: 1048576,
+	}
+
+	stageShuffleMergersCounts := map[int]int{
+		3: 2,
+		5: 3,
+	}
+
+	taskIds := []int{1003, 1004, 1005}
+
+	taskJobDescriptions := map[int]string{
+		1003: stageJobDescriptions[3],
+		1004: stageJobDescriptions[4],
+		1005: stageJobDescriptions[5],
+	}
+
+	taskStageIds := map[int]int{
+		1003: 3,
+		1004: 4,
+		1005: 5,
+	}
+
+	taskStageNames := map[int]string{
+		1003: "Test Stage Start Before / Complete After",
+		1004: "Test Stage Start After / Complete Empty",
+		1005: "Test Stage Start After / Complete After",
+	}
+
+	taskStageStatuses := map[int]string{
+		1003: "complete",
+		1004: "active",
+		1005: "complete",
+	}
+
+	taskStageAttemptIds := map[int]int{
+		1003: 0,
+		1004: 1,
+		1005: 2,
+	}
+
+	taskAttemptIds := map[int]int{
+		1003: 0,
+		1004: 2,
+		1005: 1,
+	}
+
+	taskLaunchTimes := map[int]int64{
+		1003: pastTime.UnixMilli(),
+		1004: launchTime.UnixMilli(),
+		1005: launchTime.UnixMilli(),
+	}
+
+	taskCompletionTimes := map[int]int64{
+		1003: lastRun.UTC().Add(5 * time.Second).UnixMilli(),
+		1005: lastRun.UTC().Add(15 * time.Second).UnixMilli(),
+	}
+
+	taskStatuses := map[int]string{
+		1003: "failed",
+		1005: "success",
+    }
+
+	taskExecutorIds := map[int]string{
+		1003: "executor-123",
+		1005: "executor-456",
+    }
+
+	taskLocalities := map[int]string{
+		1003: "NODE_LOCAL",
+        1005: "RACK_LOCAL",
+    }
+
+	taskSpeculativeFlags := map[int]bool{
+		1003: false,
+        1005: true,
+    }
+
+	taskDurations := map[int]int{
+		1003: 20000,
+		1005: 10000,
+	}
+
+	taskInputReadBytes := map[int]int{
+		1003: 2097152,
+		1005: 1048576,
+	}
+
+	taskSchedulerDelays := map[int]int{
+		1003: 5000,
+		1005: 3000,
+	}
+
+	taskGettingResultDurations := map[int]int{
+		1003: 8000,
+		1005: 10000,
+	}
+
+	taskSnapStartedTaskCounts := map[int]int{
+		1003: 1,
+		1005: 2,
+	}
+
+	found3Complete := false
+	found4Start := false
+	found5Start := false
+	found5Complete := false
+	found9Start := false
+	found10Start := false
+	found11Complete := false
+	found12Complete := false
+	foundStageOther := false
+	found1003Complete := false
+	found1004Start := false
+	found1005Start := false
+	found1005Complete := false
+	foundTaskOther := false
+
+	// Verify that all events have the expected attributes
+	for _, event := range events {
+		// Verify timestamp
+		assert.Equal(
+			t,
+			now.UnixMilli(),
+			event.Timestamp,
+			"Should have the correct event timestamp",
+		)
+
+		// Verify event type
+		assert.Contains(
+			t,
+			validEventTypes,
+			event.Type,
+		)
+
+		// Verify attributes
+		assert.NotNil(t, event.Attributes)
 
 		// Verify basic attributes
-		assert.Contains(t, metric.Attributes, "sparkAppId")
-		assert.Equal(t, "app-123456", metric.Attributes["sparkAppId"])
-		assert.Contains(t, metric.Attributes, "sparkAppName")
-		assert.Equal(t, "Test Spark App", metric.Attributes["sparkAppName"])
-		assert.Contains(t, metric.Attributes, "environment")
-		assert.Equal(t, "test", metric.Attributes["environment"])
-		assert.Contains(t, metric.Attributes, "cluster")
-		assert.Equal(t, "spark-test", metric.Attributes["cluster"])
+		assert.Contains(t, event.Attributes, "sparkAppId")
+		assert.Equal(t, "app-123456", event.Attributes["sparkAppId"])
+		assert.Contains(t, event.Attributes, "sparkAppName")
+		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
+		assert.Contains(t, event.Attributes, "environment")
+		assert.Equal(t, "test", event.Attributes["environment"])
+		assert.Contains(t, event.Attributes, "cluster")
+		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceId")
-		assert.Equal(t, int64(12345), metric.Attributes["databricksWorkspaceId"])
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceName")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
+		assert.Equal(t, int64(12345), event.Attributes["databricksWorkspaceId"])
+		assert.Contains(t, event.Attributes, "databricksWorkspaceName")
 		assert.Equal(
 			t,
 			"foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceName"],
+			event.Attributes["databricksWorkspaceName"],
 		)
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceUrl")
+		assert.Contains(t, event.Attributes, "databricksWorkspaceUrl")
 		assert.Equal(
 			t,
 			"https://foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceUrl"],
+			event.Attributes["databricksWorkspaceUrl"],
 		)
 
-		if metric.Name != "spark.app.stages" {
-			// Verify stage attributes
-			assert.Contains(t, metric.Attributes, "sparkAppStageId")
-			assert.Contains(
-				t,
-				[]int{1, 2, 3},
-				metric.Attributes["sparkAppStageId"],
-			)
-			assert.Contains(t, metric.Attributes, "sparkAppStageName")
+		// Verify event
+		assert.Contains(t, event.Attributes, "event")
+		assert.Contains(
+			t,
+			validEvents,
+			event.Attributes["event"],
+		)
+
+		evt := event.Attributes["event"].(string)
+
+		if event.Type == "SparkStage" {
+			// Verify SparkStage events have expected attributes
+			assert.Contains(t, event.Attributes, "stageId")
+			assert.Contains(t, stageIds, event.Attributes["stageId"])
+
+			stageId := event.Attributes["stageId"].(int)
+
+			assert.Contains(t, event.Attributes, "jobDescription")
 			assert.Equal(
-                t,
-                stageNames[metric.Attributes["sparkAppStageId"].(int)],
-                metric.Attributes["sparkAppStageName"],
-            )
-			assert.Contains(t, metric.Attributes, "sparkAppStageStatus")
-			assert.Equal(
 				t,
-				stageStatuses[metric.Attributes["sparkAppStageId"].(int)],
-				metric.Attributes["sparkAppStageStatus"],
+				stageJobDescriptions[stageId],
+				event.Attributes["jobDescription"],
 			)
 
-			// Verify metric name format
+			assert.Contains(t, event.Attributes, "stageName")
+			assert.Equal(
+				t,
+				stageNames[stageId],
+				event.Attributes["stageName"],
+			)
+
+			assert.Contains(t, event.Attributes, "details")
 			assert.True(
 				t,
-				strings.HasPrefix(metric.Name, "spark.app.stage."),
-				"Metric name should start with 'spark.app.stage.' but found: %s",
-				metric.Name,
+				len(event.Attributes["details"].(string)) <= 4096,
+				"Details should be less than or equal to 4096 characters",
+			)
+			assert.Equal(
+				t,
+				stageDetails[stageId],
+				event.Attributes["details"],
 			)
 
-			if strings.HasPrefix(metric.Name, "spark.app.stage.task.") {
-				// Verify task attributes
-				assert.Contains(t, metric.Attributes, "sparkAppTaskId")
+			assert.Contains(t, event.Attributes, "attemptId")
+			assert.Equal(
+				t,
+				stageAttemptIds[stageId],
+				event.Attributes["attemptId"],
+			)
+
+			if evt == "start" {
+				if stageId == 4 {
+					found4Start = true
+				} else if stageId == 5 {
+					found5Start = true
+				} else if stageId == 9 {
+					found9Start = true
+				} else if stageId == 10 {
+					// We aren't supposed to find a start event for stage 10 so
+					// don't verify any attributes, just set the flag to true
+					// to indicate we found it. This will cause the assertion at
+					// the end of the test to fail and it will fail the test.
+					found10Start = true
+					continue
+				} else {
+					foundStageOther = true
+					continue
+				}
+
+				assert.NotContains(t, event.Attributes, "status")
+
+				assert.Contains(t, event.Attributes, "firstTaskLaunchedTime")
+				assert.Equal(
+					t,
+					stageFirstTaskLaunchedTimes[stageId],
+					event.Attributes["firstTaskLaunchedTime"],
+				)
+
+				if stageId == 9 {
+					assert.Contains(t, event.Attributes, "submissionTime")
+					assert.Equal(
+						t,
+						futureTime.UnixMilli(),
+						event.Attributes["submissionTime"],
+					)
+				} else {
+					assert.NotContains(t, event.Attributes, "submissionTime")
+				}
+			} else if evt == "complete" {
+				if stageId == 3 {
+					found3Complete = true
+				} else if stageId == 5 {
+					found5Complete = true
+				} else if stageId == 11 {
+					found11Complete = true
+
+					assert.Contains(t, event.Attributes, "status")
+					assert.Equal(
+						t,
+						"skipped",
+						event.Attributes["status"],
+					)
+
+					assert.Contains(t, event.Attributes, "taskCount")
+					assert.Equal(
+						t,
+						3,
+						event.Attributes["taskCount"],
+					)
+
+					// Verify we don't see a few of the other attributes that
+					// would normally be on a complete event.
+					assert.NotContains(
+						t,
+						event.Attributes,
+						"firstTaskLaunchedTime",
+					)
+					assert.NotContains(t, event.Attributes, "completionTime")
+					assert.NotContains(t, event.Attributes, "duration")
+					assert.NotContains(
+						t,
+						event.Attributes,
+						"completedTaskCount",
+					)
+					assert.NotContains(
+						t,
+						event.Attributes,
+						"completedIndexCount",
+					)
+					assert.NotContains(
+						t,
+						event.Attributes,
+						"peakJvmHeapMemoryUsedBytes",
+					)
+					assert.NotContains(
+						t,
+						event.Attributes,
+						"shuffleMergersCount",
+					)
+
+					continue
+				} else if stageId == 12 {
+					// We aren't supposed to find a complete event for stage 12
+					// so don't verify any attributes, just set the flag to true
+					// to indicate we found it. This will cause the assertion at
+					// the end of the test to fail and it will fail the test.
+					found12Complete = true
+					continue
+				} else {
+					foundStageOther = true
+					continue
+				}
+
+				assert.Contains(t, event.Attributes, "status")
+				assert.Equal(
+					t,
+					stageCompleteEventStatuses[stageId],
+					event.Attributes["status"],
+				)
+
+				assert.Contains(t, event.Attributes, "firstTaskLaunchedTime")
+				assert.Equal(
+					t,
+					stageFirstTaskLaunchedTimes[stageId],
+					event.Attributes["firstTaskLaunchedTime"],
+				)
+
+				assert.Contains(t, event.Attributes, "completionTime")
+				assert.Equal(
+					t,
+					stageCompletionTimes[stageId],
+					event.Attributes["completionTime"],
+				)
+
+				assert.Contains(t, event.Attributes, "duration")
+				assert.Equal(
+					t,
+					stageDurations[stageId],
+					event.Attributes["duration"],
+				)
+
+				assert.Contains(t, event.Attributes, "completedTaskCount")
+				assert.Equal(
+					t,
+					stageCompletedTaskCounts[stageId],
+					event.Attributes["completedTaskCount"],
+				)
+
+				assert.Contains(t, event.Attributes, "completedIndexCount")
+				assert.Equal(
+					t,
+					stageCompletedIndexCounts[stageId],
+					event.Attributes["completedIndexCount"],
+				)
+
 				assert.Contains(
 					t,
-					[]int{1001, 1002},
-					metric.Attributes["sparkAppTaskId"],
+					event.Attributes,
+					"peakJvmHeapMemoryUsedBytes",
 				)
-				assert.Contains(t, metric.Attributes, "sparkAppTaskExecutorId")
 				assert.Equal(
 					t,
-					stageTaskExecutorIds[
-						metric.Attributes["sparkAppTaskId"].(int),
-					],
-					metric.Attributes["sparkAppTaskExecutorId"],
+					stageJvmHeapPeakMemoryUsedBytes[stageId],
+					event.Attributes["peakJvmHeapMemoryUsedBytes"],
 				)
-				assert.Contains(t, metric.Attributes, "sparkAppTaskStatus")
+
+				assert.Contains(t, event.Attributes, "shuffleMergersCount")
 				assert.Equal(
 					t,
-					stageTaskStatuses[
-						metric.Attributes["sparkAppTaskId"].(int),
-					],
-					metric.Attributes["sparkAppTaskStatus"],
+					stageShuffleMergersCounts[stageId],
+					event.Attributes["shuffleMergersCount"],
 				)
-				assert.Contains(t, metric.Attributes, "sparkAppTaskLocality")
-				assert.Equal(
-					t,
-					stageTaskLocalities[
-						metric.Attributes["sparkAppTaskId"].(int),
-					],
-					metric.Attributes["sparkAppTaskLocality"],
-				)
-				assert.Contains(t, metric.Attributes, "sparkAppTaskSpeculative")
-				assert.Equal(
-					t,
-					stageTaskSpeculativeFlags[
-						metric.Attributes["sparkAppTaskId"].(int),
-					],
-                    metric.Attributes["sparkAppTaskSpeculative"],
-				)
-				assert.Contains(t, metric.Attributes, "sparkAppTaskAttempt")
-				assert.Equal(
-					t,
-					stageTaskAttempts[
-						metric.Attributes["sparkAppTaskId"].(int),
-					],
-					metric.Attributes["sparkAppTaskAttempt"],
-				)
+			} else {
+				foundStageOther = true
 			}
-		} else {
-			// Verify stage status attribute
-			assert.Contains(t, metric.Attributes, "sparkAppStageStatus")
-			assert.Contains(
+		} else if event.Type == "SparkTask" {
+			// Verify SparkTask events have expected attributes
+			assert.Contains(t, event.Attributes, "taskId")
+			assert.Contains(t, taskIds, event.Attributes["taskId"])
+
+			taskId := event.Attributes["taskId"].(int)
+
+			assert.Contains(t, event.Attributes, "jobDescription")
+			assert.Equal(
 				t,
-				[]string{"active", "pending", "complete", "failed", "skipped"},
-				metric.Attributes["sparkAppStageStatus"],
+				taskJobDescriptions[taskId],
+				event.Attributes["jobDescription"],
 			)
 
-			if metric.Attributes["sparkAppStageStatus"] == "active" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-			} else if metric.Attributes["sparkAppStageStatus"] == "pending" {
-				assert.Equal(t, int64(1), metric.Value.Int())
-			} else if metric.Attributes["sparkAppStageStatus"] == "complete" {
-				assert.Equal(t, int64(2), metric.Value.Int())
-			} else if metric.Attributes["sparkAppStageStatus"] == "failed" {
-				assert.Equal(t, int64(0), metric.Value.Int())
-			} else if metric.Attributes["sparkAppStageStatus"] == "skipped" {
-				assert.Equal(t, int64(0), metric.Value.Int())
+			assert.Contains(t, event.Attributes, "stageId")
+			assert.Equal(
+				t,
+				taskStageIds[taskId],
+				event.Attributes["stageId"],
+			)
+
+			assert.Contains(t, event.Attributes, "stageName")
+			assert.Equal(
+				t,
+				taskStageNames[taskId],
+				event.Attributes["stageName"],
+			)
+
+			assert.Contains(t, event.Attributes, "stageStatus")
+			assert.Equal(
+				t,
+				taskStageStatuses[taskId],
+				event.Attributes["stageStatus"],
+			)
+
+			assert.Contains(t, event.Attributes, "stageAttemptId")
+			assert.Equal(
+				t,
+				taskStageAttemptIds[taskId],
+				event.Attributes["stageAttemptId"],
+			)
+
+			assert.Contains(t, event.Attributes, "attemptId")
+			assert.Equal(
+				t,
+				taskAttemptIds[taskId],
+				event.Attributes["attemptId"],
+			)
+
+			if evt == "start" {
+				if taskId == 1004 {
+					found1004Start = true
+				} else if taskId == 1005 {
+					found1005Start = true
+				} else {
+					foundTaskOther = true
+					continue
+				}
+
+				assert.NotContains(t, event.Attributes, "status")
+
+				assert.Contains(t, event.Attributes, "launchTime")
+				assert.Equal(
+					t,
+					taskLaunchTimes[taskId],
+					event.Attributes["launchTime"],
+				)
+			} else if evt == "complete" {
+				if taskId == 1003 {
+					found1003Complete = true
+				} else if taskId == 1005 {
+					found1005Complete = true
+				} else {
+					foundTaskOther = true
+					continue
+				}
+
+				assert.Contains(t, event.Attributes, "status")
+				assert.Equal(
+					t,
+					taskStatuses[taskId],
+					event.Attributes["status"],
+				)
+
+				assert.Contains(t, event.Attributes, "launchTime")
+				assert.Equal(
+					t,
+					taskLaunchTimes[taskId],
+					event.Attributes["launchTime"],
+				)
+
+				assert.Contains(t, event.Attributes, "completionTime")
+				assert.Equal(
+					t,
+					taskCompletionTimes[taskId],
+					event.Attributes["completionTime"],
+				)
+
+				assert.Contains(t, event.Attributes, "executorId")
+				assert.Equal(
+					t,
+					taskExecutorIds[taskId],
+					event.Attributes["executorId"],
+				)
+
+				assert.Contains(t, event.Attributes, "locality")
+				assert.Equal(
+					t,
+					taskLocalities[taskId],
+					event.Attributes["locality"],
+				)
+
+				assert.Contains(t, event.Attributes, "speculative")
+				assert.Equal(
+					t,
+					taskSpeculativeFlags[taskId],
+					event.Attributes["speculative"],
+				)
+
+				assert.Contains(t, event.Attributes, "duration")
+				assert.Equal(
+					t,
+					taskDurations[taskId],
+					event.Attributes["duration"],
+				)
+
+				assert.Contains(t, event.Attributes, "inputReadBytes")
+				assert.Equal(
+					t,
+					taskInputReadBytes[taskId],
+					event.Attributes["inputReadBytes"],
+				)
+
+				assert.Contains(t, event.Attributes, "schedulerDelay")
+				assert.Equal(
+					t,
+					taskSchedulerDelays[taskId],
+					event.Attributes["schedulerDelay"],
+				)
+
+				assert.Contains(t, event.Attributes, "gettingResultDuration")
+				assert.Equal(
+					t,
+					taskGettingResultDurations[taskId],
+					event.Attributes["gettingResultDuration"],
+				)
+
+				assert.Contains(t, event.Attributes, "snapStartedTaskCount")
+				assert.Equal(
+					t,
+					taskSnapStartedTaskCounts[taskId],
+					event.Attributes["snapStartedTaskCount"],
+				)
+			} else {
+				foundTaskOther = true
 			}
 		}
 	}
 
-	// Verify a few metrics to ensure values are correctly passed
-
-	stageCompletedTasks := map[int]int64{
-		1: 20,
-		2: 0,
-		3: 115,
-	}
-
-	stageShuffleMergersCount := map[int]int64{
-		1: 2,
-		2: 0,
-		3: 3,
-	}
-
-	stageJvmHeapPeakMemory := map[int]int64{
-		1: 8388608, // 8MB
-		2: 0,
-		3: 4194304, // 4MB
-	}
-
-	stageCompletedIndices := map[int]int64{
-		1: 20,
-		2: 0,
-		3: 115,
-	}
-
-	stageTaskDurations := map[int]int64{
-		1001: 5000,
-		1002: 7500,
-	}
-
-	stageTaskInputBytesRead := map[int]int64{
-		1001: 1048576, // 1MB
-		1002: 2097152, // 2MB
-	}
-
-	stageTaskShufflePushReadCorruptMergedBlockChunks := map[int]int64{
-		1001: 0,
-		1002: 1,
-	}
-
-	for _, metric := range metrics {
-		if metric.Name == "spark.app.stage.tasks" &&
-			metric.Attributes["sparkAppTaskStatus"] == "complete" {
-			assert.Equal(
-				t,
-				stageCompletedTasks[
-					metric.Attributes["sparkAppStageId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		} else if metric.Name == "spark.app.stage.shuffle.mergersCount" {
-			assert.Equal(
-				t,
-				stageShuffleMergersCount[
-					metric.Attributes["sparkAppStageId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		} else if metric.Name ==
-			"spark.app.stage.executor.memory.peak.jvmHeap" {
-			assert.Equal(
-				t,
-				stageJvmHeapPeakMemory[
-					metric.Attributes["sparkAppStageId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		} else if metric.Name == "spark.app.stage.indices.completed" {
-			assert.Equal(
-				t,
-				stageCompletedIndices[
-					metric.Attributes["sparkAppStageId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		} else if metric.Name == "spark.app.stage.task.duration" {
-			assert.Equal(
-				t,
-				stageTaskDurations[metric.Attributes["sparkAppTaskId"].(int)],
-				metric.Value.Int(),
-			)
-		} else if metric.Name == "spark.app.stage.task.input.bytesRead" {
-			assert.Equal(
-				t,
-				stageTaskInputBytesRead[
-					metric.Attributes["sparkAppTaskId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		} else if metric.Name ==
-			"spark.app.stage.task.shuffle.read.push.corruptMergedBlockChunks" {
-			assert.Equal(
-				t,
-				stageTaskShufflePushReadCorruptMergedBlockChunks[
-					metric.Attributes["sparkAppTaskId"].(int),
-				],
-				metric.Value.Int(),
-			)
-		}
-	}
+	// Verify we saw exactly the events we expected
+	assert.True(t, found3Complete)
+	assert.True(t, found4Start)
+	assert.True(t, found5Start)
+	assert.True(t, found5Complete)
+	assert.True(t, found9Start)
+	assert.False(t, found10Start)
+	assert.True(t, found11Complete)
+	assert.False(t, found12Complete)
+	assert.False(t, foundStageOther)
+	assert.True(t, found1003Complete)
+	assert.True(t, found1004Start)
+	assert.True(t, found1005Start)
+	assert.True(t, found1005Complete)
+	assert.False(t, foundTaskOther)
 }
 
 func TestCollectSparkAppRDDMetrics_GetApplicationRDDsError(t *testing.T) {
@@ -3249,7 +3177,13 @@ func TestCollectSparkAppRDDMetrics_GetApplicationRDDsError(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -3275,33 +3209,26 @@ func TestCollectSparkAppRDDMetrics_GetApplicationRDDsError(t *testing.T) {
 		return nil, errors.New(expectedError)
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 100) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 100) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppRDDMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics to make sure the channel is empty
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events to make sure the channel is empty
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
@@ -3312,7 +3239,7 @@ func TestCollectSparkAppRDDMetrics_GetApplicationRDDsError(t *testing.T) {
 		getApplicationRDDsCalled,
 		"GetApplicationRDDs should be called",
 	)
-	assert.Empty(t, metrics, "No metrics should be received")
+	assert.Empty(t, events, "No events should be received")
 }
 
 func TestCollectSparkAppRDDMetrics(t *testing.T) {
@@ -3320,7 +3247,17 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock metrics decorator
-	mockDecorator := &MockSparkMetricDecorator{}
+	mockDecorator := &MockSparkEventDecorator{}
+
+	// Setup mock tag map
+	tags := map[string]string{
+		"environment": "test",
+		"cluster":     "spark-test",
+	}
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
 
 	// Setup mock SparkApplication
 	sparkApp := &SparkApplication{
@@ -3333,6 +3270,7 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 		{
 			Id:                  1,
 			Name:                "Test RDD 1",
+			StorageLevel:        "Disk Memory Serialized 1x Replicated",
 			NumPartitions:       10,
 			NumCachedPartitions: 8,
 			MemoryUsed:          1048576, // 1MB
@@ -3366,28 +3304,32 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 				},
 			},
 			Partitions: []struct {
-				BlockName  string   `json:"blockName"`
-				MemoryUsed int      `json:"memoryUsed"`
-				DiskUsed   int      `json:"diskUsed"`
-				Executors  []string `json:"executors"`
+				BlockName       string   `json:"blockName"`
+				StorageLevel    string   `json:"storageLevel"`
+				MemoryUsed      int      `json:"memoryUsed"`
+				DiskUsed        int      `json:"diskUsed"`
+				Executors       []string `json:"executors"`
 			}{
 				{
-					BlockName:  "rdd_1_0",
-					MemoryUsed: 131072, // 128KB
-					DiskUsed:   65536,  // 64KB
-					Executors:  []string{"executor-1"},
+					BlockName:    "rdd_1_0",
+					StorageLevel: "Disk Memory Serialized 1x Replicated",
+					MemoryUsed:   131072, // 128KB
+					DiskUsed:     65536,  // 64KB
+					Executors:    []string{"driver", "executor-1"},
 				},
 				{
-					BlockName:  "rdd_1_1",
-					MemoryUsed: 65536, // 64KB
-					DiskUsed:   65536, // 64KB
-					Executors:  []string{"executor-1"},
+					BlockName:    "rdd_1_1",
+					StorageLevel: "Disk Memory Serialized 2x Replicated",
+					MemoryUsed:   65536, // 64KB
+					DiskUsed:     65536, // 64KB
+					Executors:    []string{"executor-1"},
 				},
 			},
 		},
 		{
 			Id:                  2,
 			Name:                "Test RDD 2",
+			StorageLevel:        "Disk Memory Serialized 2x Replicated",
 			NumPartitions:       20,
 			NumCachedPartitions: 15,
 			MemoryUsed:          2097152, // 2MB
@@ -3421,22 +3363,25 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 				},
 			},
 			Partitions: []struct {
-				BlockName  string   `json:"blockName"`
-				MemoryUsed int      `json:"memoryUsed"`
-				DiskUsed   int      `json:"diskUsed"`
-				Executors  []string `json:"executors"`
+				BlockName    string   `json:"blockName"`
+				StorageLevel string   `json:"storageLevel"`
+				MemoryUsed   int      `json:"memoryUsed"`
+				DiskUsed     int      `json:"diskUsed"`
+				Executors    []string `json:"executors"`
 			}{
 				{
-					BlockName:  "rdd_2_0",
-					MemoryUsed: 1572864, // 1.5MB
-					DiskUsed:   0,
-					Executors:  []string{"executor-1"},
+					BlockName:    "rdd_2_0",
+					StorageLevel: "Disk Memory Serialized 3x Replicated",
+					MemoryUsed:   1572864, // 1.5MB
+					DiskUsed:     0,
+					Executors:    []string{"executor-2"},
 				},
 				{
-					BlockName:  "rdd_2_1",
-					MemoryUsed: 786432, // 768KB
-					DiskUsed:   0,
-					Executors:  []string{"executor-1"},
+					BlockName:    "rdd_2_1",
+					StorageLevel: "Disk Memory Serialized 4x Replicated",
+					MemoryUsed:   786432, // 768KB
+					DiskUsed:     0,
+					Executors:    []string{"executor-2", "driver"},
 				},
 			},
 		},
@@ -3452,164 +3397,281 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 		return mockRDDs, nil
 	}
 
-	// Setup a metrics channel to receive metrics
-	metricsChan := make(chan model.Metric, 1000) // Buffer to prevent blocking
-
-	// Setup mock tag map
-	tags := map[string]string{
-		"environment": "test",
-		"cluster":     "spark-test",
-	}
+	// Setup an events channel to receive events
+	eventsChan := make(chan model.Event, 1000) // Buffer to prevent blocking
 
 	// Execute the function under test
 	err := collectSparkAppRDDMetrics(
 		context.Background(),
 		mockClient,
 		sparkApp,
-		"spark.",
 		mockDecorator,
 		tags,
-		metricsChan,
+		eventsChan,
 	)
 
 	// Close the channel to iterate through it
-	close(metricsChan)
+	close(eventsChan)
 
-	// Collect all metrics for verification
-	metrics := make([]model.Metric, 0)
-	for metric := range metricsChan {
-		metrics = append(metrics, metric)
+	// Collect all events for verification
+	events := make([]model.Event, 0)
+	for event := range eventsChan {
+		events = append(events, event)
 	}
 
 	// Verify results
 	assert.NoError(t, err)
-	assert.NotEmpty(t, metrics, "Should have received metrics")
+	assert.NotEmpty(t, events, "Should have received events")
+	assert.Equal(t, 10, len(events), "Should have received ten events")
+
+	validEventTypes := []string{
+		"SparkRDDSample",
+		"SparkRDDDistributionSample",
+		"SparkRDDPartitionSample",
+	}
+
+	rddIds := []int{1, 2}
 
 	rddNames := map[int]string{
 		1: "Test RDD 1",
         2: "Test RDD 2",
 	}
 
-	// Verify that all metrics have the expected attributes
-	for _, metric := range metrics {
-		assert.NotNil(t, metric.Attributes)
-
-		// Verify basic attributes
-		assert.Contains(t, metric.Attributes, "sparkAppId")
-		assert.Equal(t, "app-123456", metric.Attributes["sparkAppId"])
-		assert.Contains(t, metric.Attributes, "sparkAppName")
-		assert.Equal(t, "Test Spark App", metric.Attributes["sparkAppName"])
-		assert.Contains(t, metric.Attributes, "environment")
-		assert.Equal(t, "test", metric.Attributes["environment"])
-		assert.Contains(t, metric.Attributes, "cluster")
-		assert.Equal(t, "spark-test", metric.Attributes["cluster"])
-
-		// Verify workspace attributes
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceId")
-		assert.Equal(t, int64(12345), metric.Attributes["databricksWorkspaceId"])
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceName")
-		assert.Equal(
-			t,
-			"foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceName"],
-		)
-		assert.Contains(t, metric.Attributes, "databricksWorkspaceUrl")
-		assert.Equal(
-			t,
-			"https://foo.fakedomain.local",
-			metric.Attributes["databricksWorkspaceUrl"],
-		)
-
-		// Verify RDD attributes
-		assert.Contains(t, metric.Attributes, "sparkAppRDDId")
-		assert.Contains(
-			t,
-			[]int{1, 2},
-			metric.Attributes["sparkAppRDDId"],
-		)
-		assert.Contains(t, metric.Attributes, "sparkAppRDDName")
-		assert.Equal(
-            t,
-            rddNames[metric.Attributes["sparkAppRDDId"].(int)],
-            metric.Attributes["sparkAppRDDName"],
-        )
-
-		// Verify metric name format
-		assert.True(
-			t,
-			strings.HasPrefix(metric.Name, "spark.app.storage.rdd."),
-			"Metric name should start with 'spark.app.storage.rdd.' but found: %s",
-			metric.Name,
-		)
+	rddStorageLevels := map[int]string{
+		1: "Disk Memory Serialized 1x Replicated",
+		2: "Disk Memory Serialized 2x Replicated",
 	}
 
-	// Verify a few metrics to ensure values are correctly passed
-
-	rddMemoryUsed := map[int]int64{
+	rddMemoryUsedBytes := map[int]int{
 		1: 1048576, // 1MB
 		2: 2097152, // 2MB
 	}
 
-	rddDistributionMemoryUsed := map[int]map[int]int64{
+	rddDistributionIndices := []int{0, 1}
+
+	rddDistributionMemoryUsedBytes := map[int]map[int]int{
 		1: {0: 262144, 1: 524288},
 		2: {0: 1048576, 1: 3145728},
 	}
 
-	rddPartitionMemoryUsed := map[int]map[string]int64{
+	rddPartitionBlockNames := []string{
+		"rdd_1_0",
+		"rdd_1_1",
+		"rdd_2_0",
+		"rdd_2_1",
+	}
+
+	rddPartitionStorageLevels := map[int]map[string]string{
+		1: {"rdd_1_0": "Disk Memory Serialized 1x Replicated",
+			"rdd_1_1": "Disk Memory Serialized 2x Replicated"},
+		2: {"rdd_2_0": "Disk Memory Serialized 3x Replicated",
+			"rdd_2_1": "Disk Memory Serialized 4x Replicated"},
+	}
+
+	rddPartitionMemoryUsedBytes := map[int]map[string]int{
 		1: {"rdd_1_0": 131072, "rdd_1_1": 65536},
 		2: {"rdd_2_0": 1572864, "rdd_2_1": 786432},
 	}
 
-	// Verify a few metrics to ensure values are correctly passed
-	for _, metric := range metrics {
-		if metric.Name == "spark.app.storage.rdd.memory.used" {
+	rddPartitionExecutorIds := map[int]map[string]string{
+		1: {"rdd_1_0": "driver,executor-1", "rdd_1_1": "executor-1"},
+		2: {"rdd_2_0": "executor-2", "rdd_2_1": "executor-2,driver"},
+	}
+
+	// Verify that all events have the expected attributes
+	for _, event := range events {
+		// Verify timestamp
+		assert.Equal(
+			t,
+			now.UnixMilli(),
+			event.Timestamp,
+			"Should have the correct event timestamp",
+		)
+
+		// Verify event type
+		assert.Contains(t, validEventTypes, event.Type)
+
+		// Verify attributes
+		assert.NotNil(t, event.Attributes)
+
+		// Verify basic attributes
+		assert.Contains(t, event.Attributes, "sparkAppId")
+		assert.Equal(t, "app-123456", event.Attributes["sparkAppId"])
+		assert.Contains(t, event.Attributes, "sparkAppName")
+		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
+		assert.Contains(t, event.Attributes, "environment")
+		assert.Equal(t, "test", event.Attributes["environment"])
+		assert.Contains(t, event.Attributes, "cluster")
+		assert.Equal(t, "spark-test", event.Attributes["cluster"])
+
+		// Verify workspace attributes
+		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
+		assert.Equal(t, int64(12345), event.Attributes["databricksWorkspaceId"])
+		assert.Contains(t, event.Attributes, "databricksWorkspaceName")
+		assert.Equal(
+			t,
+			"foo.fakedomain.local",
+			event.Attributes["databricksWorkspaceName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksWorkspaceUrl")
+		assert.Equal(
+			t,
+			"https://foo.fakedomain.local",
+			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify RDD attributes (on all 3 RDD event typoes)
+		assert.Contains(t, event.Attributes, "rddId")
+		assert.Contains(t, rddIds, event.Attributes["rddId"])
+
+		rddId := event.Attributes["rddId"].(int)
+
+		assert.Contains(t, event.Attributes, "rddName")
+		assert.Equal(t, rddNames[rddId], event.Attributes["rddName"])
+
+		if event.Type == "SparkRDDSample" {
+			// Verify SparkRDDSample events have expected attributes
+			assert.Contains(t, event.Attributes, "storageLevel")
 			assert.Equal(
 				t,
-				rddMemoryUsed[metric.Attributes["sparkAppRDDId"].(int)],
-				metric.Value.Int(),
-			)
-		} else if strings.HasPrefix(
-			metric.Name,
-			"spark.app.storage.rdd.distribution.",
-		) {
-			// Verify RDD distribution attributes
-			assert.Contains(
-				t,
-				metric.Attributes,
-				"sparkAppRddDistributionIndex",
+				rddStorageLevels[rddId],
+				event.Attributes["storageLevel"],
 			)
 
-			if metric.Name == "spark.app.storage.rdd.distribution.memory.used" {
-				assert.Equal(
-					t,
-					rddDistributionMemoryUsed[
-						metric.Attributes["sparkAppRDDId"].(int),
-					][metric.Attributes["sparkAppRddDistributionIndex"].(int)],
-					metric.Value.Int(),
-				)
-			}
-		} else if strings.HasPrefix(
-			metric.Name,
-			"spark.app.storage.rdd.partition.",
-		) {
-			// Verify RDD partition attributes
+			assert.Contains(t, event.Attributes, "memoryUsedBytes")
+            assert.Equal(
+                t,
+                rddMemoryUsedBytes[rddId],
+                event.Attributes["memoryUsedBytes"],
+            )
+		} else if event.Type == "SparkRDDDistributionSample" {
+			assert.Contains(t, event.Attributes, "distributionIndex")
 			assert.Contains(
 				t,
-				metric.Attributes,
-				"sparkAppRddPartitionBlockName",
+				rddDistributionIndices,
+				event.Attributes["distributionIndex"],
 			)
 
-			if metric.Name == "spark.app.storage.rdd.partition.memory.used" {
-				assert.Equal(
-					t,
-					rddPartitionMemoryUsed[
-						metric.Attributes["sparkAppRDDId"].(int),
-					][
-						metric.Attributes["sparkAppRddPartitionBlockName"].(string),
-					],
-					metric.Value.Int(),
-				)
-			}
+			distributionIndex := event.Attributes["distributionIndex"].(int)
+
+			assert.Contains(t, event.Attributes, "memoryUsedBytes")
+			assert.Equal(
+                t,
+                rddDistributionMemoryUsedBytes[rddId][distributionIndex],
+                event.Attributes["memoryUsedBytes"],
+            )
+		} else if event.Type == "SparkRDDPartitionSample" {
+			assert.Contains(t, event.Attributes, "blockName")
+			assert.Contains(
+				t,
+				rddPartitionBlockNames,
+				event.Attributes["blockName"],
+			)
+
+			blockName := event.Attributes["blockName"].(string)
+
+			assert.Contains(t, event.Attributes, "storageLevel")
+			assert.Equal(
+				t,
+				rddPartitionStorageLevels[rddId][blockName],
+				event.Attributes["storageLevel"],
+			)
+
+			assert.Contains(t, event.Attributes, "memoryUsedBytes")
+			assert.Equal(
+                t,
+                rddPartitionMemoryUsedBytes[rddId][blockName],
+				event.Attributes["memoryUsedBytes"],
+            )
+
+			assert.Contains(t, event.Attributes, "executorIds")
+			assert.Equal(
+				t,
+				rddPartitionExecutorIds[rddId][blockName],
+				event.Attributes["executorIds"],
+			)
 		}
 	}
+}
+
+func TestShouldReportSkippedStage_CompletedJobContainsStageId(t *testing.T) {
+    // Setup mock SparkStage
+    stage := &SparkStage{
+        StageId: 42,
+    }
+
+    // Setup completedJobs that contains a job with the mock stage ID in it's
+	// list of stage IDs
+    completedJobs := []SparkJob{
+        {
+			// This job includes the mock stage ID (42) in it's list of stage
+			// IDs
+            JobId:   1,
+            StageIds: []int{41, 42, 43},
+        },
+        {
+            JobId:   2,
+            StageIds: []int{44, 45},
+        },
+    }
+
+	// Execute the function under test
+    shouldReport := shouldReportSkippedStage(completedJobs, stage)
+
+	// Verify results
+    assert.True(
+    	t,
+    	shouldReport,
+    	"Stage should be reported if in stage ID list of a job in completedJobs",
+    )
+}
+
+func TestShouldReportSkippedStage_CompletedJobDoesNotContainStageId(
+	t *testing.T,
+) {
+    // Setup mock SparkStage
+    stage := &SparkStage{
+        StageId: 42,
+    }
+
+    // Setup completedJobs that does not contain a job with the mock stage ID
+	// in it's list of stage IDs
+    completedJobs := []SparkJob{
+        {
+			// This job does not include the mock stage ID (42) in it's list of
+			// stage IDs
+            JobId:   1,
+            StageIds: []int{41, 43},
+        },
+    }
+
+	// Execute the function under test
+    shouldReport := shouldReportSkippedStage(completedJobs, stage)
+
+	// Verify results
+    assert.False(
+    	t,
+    	shouldReport,
+    	"Stage should not be reported if not in stage ID list of a job in completedJobs",
+    )
+}
+
+func TestShouldReportSkippedStage_CompletedJobsEmpty(t *testing.T) {
+    // Setup mock SparkStage
+    stage := &SparkStage{
+        StageId: 42,
+    }
+
+    // Setup empty completedJobs
+    completedJobs := []SparkJob{}
+
+	// Execute the function under test
+    shouldReport := shouldReportSkippedStage(completedJobs, stage)
+
+	// Verify results
+    assert.False(
+    	t,
+    	shouldReport,
+    	"Stage should not be reported if completedJobs is empty",
+    )
 }

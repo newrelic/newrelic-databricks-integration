@@ -52,6 +52,10 @@ type SparkExecutorPeakMemoryMetrics struct {
 
 type SparkExecutor struct {
 	Id                string                         `json:"id"`
+	IsActive          bool                           `json:"isActive"`
+	IsExcluded        bool                           `json:"isExcluded"`
+	IsBlacklisted     bool                           `json:"isBlacklisted"`
+	AddTime           string                         `json:"addTime"`
 	RddBlocks         int                            `json:"rddBlocks"`
 	MemoryUsed        int                            `json:"memoryUsed"`
 	DiskUsed          int                            `json:"diskUsed"`
@@ -90,12 +94,14 @@ type SparkExecutorSummary struct {
 }
 
 type SparkJob struct {
-	JobId          int    `json:"jobId"`
-	Name           string `json:"name"`
-	SubmissionTime string `json:"submissionTime"`
-	CompletionTime string `json:"completionTime"`
-	JobGroup       string `json:"jobGroup"`
-	StageIds       []int  `json:"stageIds"`
+	JobId          int         `json:"jobId"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description"`
+	SubmissionTime string      `json:"submissionTime"`
+	CompletionTime string      `json:"completionTime"`
+	JobGroup       string      `json:"jobGroup"`
+	JobTags        []string    `json:"jobTags"`
+	StageIds       []int       `json:"stageIds"`
 	/* status=[running|succeeded|failed|unknown] */
 	Status              string `json:"status"`
 	NumTasks            int    `json:"numTasks"`
@@ -163,6 +169,7 @@ type SparkTaskMetrics struct {
 		PhotonBufferPoolMaxMemorySize int `json:"photonBufferPoolMaxMemorySize"`
 	} `json:"photonMemoryMetrics"`
 	PhotonizedTaskTimeNs int `json:"photonizedTaskTimeNs"`
+	SnapStartedTaskCount int `json:"snapstartedTaskCount"`
 }
 
 type SparkTask struct {
@@ -197,7 +204,12 @@ type SparkStage struct {
 	*/
 	Status                           string                          `json:"status"`
 	StageId                          int                             `json:"stageId"`
+	Name                             string                          `json:"name"`
+	Description                      string                          `json:"description"`
+	Details                          string                          `json:"details"`
 	AttemptId                        int                             `json:"attemptId"`
+	SchedulingPool                   string                          `json:"schedulingPool"`
+	ResourceProfileId                int                             `json:"resourceProfileId"`
 	NumTasks                         int                             `json:"numTasks"`
 	NumActiveTasks                   int                             `json:"numActiveTasks"`
 	NumCompleteTasks                 int                             `json:"numCompleteTasks"`
@@ -246,11 +258,8 @@ type SparkStage struct {
 	ShuffleWriteBytes                int                             `json:"shuffleWriteBytes"`
 	ShuffleWriteTime                 int                             `json:"shuffleWriteTime"`
 	ShuffleWriteRecords              int                             `json:"shuffleWriteRecords"`
-	Name                             string                          `json:"name"`
-	SchedulingPool                   string                          `json:"schedulingPool"`
 	Tasks                            map[string]SparkTask            `json:"tasks"`
 	ExecutorSummary                  map[string]SparkExecutorSummary `json:"executorSummary"`
-	ResourceProfileId                int                             `json:"resourceProfileId"`
 	PeakExecutorMetrics              SparkExecutorPeakMemoryMetrics  `json:"peakExecutorMetrics"`
 	ShuffleMergersCount              int                             `json:"shuffleMergersCount"`
 }
@@ -260,6 +269,7 @@ type SparkRDD struct {
 	Name                string `json:"name"`
 	NumPartitions       int    `json:"numPartitions"`
 	NumCachedPartitions int    `json:"numCachedPartitions"`
+	StorageLevel        string `json:"storageLevel"`
 	MemoryUsed          int    `json:"memoryUsed"`
 	DiskUsed            int    `json:"diskUsed"`
 	DataDistribution    []struct {
@@ -272,10 +282,11 @@ type SparkRDD struct {
 		OffHeapMemoryRemaining int `json:"offHeapMemoryRemaining"`
 	} `json:"dataDistribution"`
 	Partitions []struct {
-		BlockName  string   `json:"blockName"`
-		MemoryUsed int      `json:"memoryUsed"`
-		DiskUsed   int      `json:"diskUsed"`
-		Executors  []string `json:"executors"`
+		BlockName       string   `json:"blockName"`
+		StorageLevel    string   `json:"storageLevel"`
+		MemoryUsed      int      `json:"memoryUsed"`
+		DiskUsed        int      `json:"diskUsed"`
+		Executors       []string `json:"executors"`
 	} `json:"partitions"`
 }
 
@@ -317,7 +328,7 @@ func InitPipelines(
 	)
 
 	// Create a metrics pipeline
-	mp := pipeline.NewMetricsPipeline("spark-metrics-pipeline")
+	mp := pipeline.NewEventsPipeline("spark-metrics-pipeline")
 	mp.AddExporter(newRelicExporter)
 
 	// Create the Spark receiver
@@ -325,7 +336,6 @@ func InitPipelines(
 		ctx,
 		i,
 		sparkApiClient,
-		viper.GetString("spark.metricPrefix"),
 		tags,
 	)
 	if err != nil {

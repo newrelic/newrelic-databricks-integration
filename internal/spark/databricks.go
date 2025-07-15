@@ -8,7 +8,6 @@ import (
 
 	"github.com/newrelic/newrelic-databricks-integration/internal/databricks"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
-	"github.com/spf13/viper"
 )
 
 var databricksJobGroupRegex = regexp.MustCompile(`^(?:[^_]+_[^_]+_dlt-([a-fA-F0-9\-]+))$|^(?:[^_]+_[^_]+_job-(\d+)-run-(\d+)-action-(\d+))$|^(?:([a-fA-F0-9\-]+)#([a-fA-F0-9\-]+)#([a-fA-F0-9\-]+))$`)
@@ -60,7 +59,7 @@ func parseDatabricksSparkJobGroup(
 	// flowId = "54321"
 	//
 	// Users can set their own job group name so If the job group name does not
-	// follow this format, we return nil and the metrics simply won't be
+	// follow this format, we return nil and the events simply won't be
 	// decorated.
 	//
 	// Note: This implementation assumes that the job group name follows the
@@ -139,21 +138,18 @@ func parseDatabricksSparkJobGroup(
 	}
 }
 
-type DatabricksMetricDecorator struct {
+type DatabricksSparkEventDecorator struct {
 	w                       databricks.DatabricksWorkspace
 	workspaceInfo           *databricks.WorkspaceInfo
-	includeJobRunTaskRunId  bool
-	includePipelineUpdateId bool
-	includePipelineFlowId   bool
 	// stageIdsToJobs keeps track of the job group info for each stage's
 	// "parent" job so that stages and tasks can be decorated with the same
 	// job group info as the "parent" job.
 	stageIdsToJobs          map[int]*databricksSparkJobGroupInfo
 }
 
-func NewDatabricksMetricDecorator(
+func NewDatabricksSparkEventDecorator(
 	ctx context.Context,
-) (*DatabricksMetricDecorator, error) {
+) (*DatabricksSparkEventDecorator, error) {
 	w, err := databricks.NewDatabricksWorkspace()
 	if err != nil {
 		return nil, err
@@ -166,30 +162,21 @@ func NewDatabricksMetricDecorator(
 		return nil, err
 	}
 
-	return &DatabricksMetricDecorator{
+	return &DatabricksSparkEventDecorator{
 		w:                       w,
 		workspaceInfo:           workspaceInfo,
-		includeJobRunTaskRunId:  viper.GetBool(
-			"spark.databricks.includeJobRunTaskRunId",
-		),
-		includePipelineUpdateId: viper.GetBool(
-            "spark.databricks.includePipelineUpdateId",
-        ),
-        includePipelineFlowId:   viper.GetBool(
-            "spark.databricks.includePipelineFlowId",
-		),
 		stageIdsToJobs:          make(map[int]*databricksSparkJobGroupInfo),
 	}, nil
 }
 
-func (d *DatabricksMetricDecorator) DecorateExecutor(
+func (d *DatabricksSparkEventDecorator) DecorateExecutor(
 	_ *SparkExecutor,
 	attrs map[string]interface{},
 ) {
 	d.decorate(nil, attrs)
 }
 
-func (d *DatabricksMetricDecorator) DecorateJob(
+func (d *DatabricksSparkEventDecorator) DecorateJob(
 	sparkJob *SparkJob,
 	attrs map[string]interface{},
 ) {
@@ -217,7 +204,7 @@ func (d *DatabricksMetricDecorator) DecorateJob(
 	}
 }
 
-func (d *DatabricksMetricDecorator) DecorateStage(
+func (d *DatabricksSparkEventDecorator) DecorateStage(
 	sparkStage *SparkStage,
 	attrs map[string]interface{},
 ) {
@@ -239,7 +226,7 @@ func (d *DatabricksMetricDecorator) DecorateStage(
 	d.decorate(nil, attrs)
 }
 
-func (d *DatabricksMetricDecorator) DecorateTask(
+func (d *DatabricksSparkEventDecorator) DecorateTask(
 	sparkStage *SparkStage,
 	_ *SparkTask,
 	attrs map[string]interface{},
@@ -262,20 +249,20 @@ func (d *DatabricksMetricDecorator) DecorateTask(
 	d.decorate(nil, attrs)
 }
 
-func (d *DatabricksMetricDecorator) DecorateRDD(
+func (d *DatabricksSparkEventDecorator) DecorateRDD(
 	_ *SparkRDD,
 	attrs map[string]interface{},
 ) {
 	d.decorate(nil, attrs)
 }
 
-func (d *DatabricksMetricDecorator) DecorateMetric(
+func (d *DatabricksSparkEventDecorator) DecorateEvent(
 	attrs map[string]interface{},
 ) {
 	d.decorate(nil, attrs)
 }
 
-func (d *DatabricksMetricDecorator) decorate(
+func (d *DatabricksSparkEventDecorator) decorate(
 	sparkJobGroupInfo *databricksSparkJobGroupInfo,
 	attrs map[string]interface{},
 ) {
@@ -292,20 +279,11 @@ func (d *DatabricksMetricDecorator) decorate(
 	// When specified, add the job group info to the attributes.
 	if sparkJobGroupInfo.jobId != -1 {
 		attrs["databricksJobId"] = sparkJobGroupInfo.jobId
-
-		if d.includeJobRunTaskRunId {
-			attrs["databricksJobRunTaskRunId"] = sparkJobGroupInfo.taskRunId
-		}
+		attrs["databricksJobRunTaskRunId"] = sparkJobGroupInfo.taskRunId
 	} else if sparkJobGroupInfo.updateId != "" {
 		attrs["databricksPipelineId"] = sparkJobGroupInfo.pipelineId
-
-		if d.includePipelineUpdateId {
-			attrs["databricksPipelineUpdateId"] = sparkJobGroupInfo.updateId
-		}
-
-		if d.includePipelineFlowId {
-            attrs["databricksPipelineFlowId"] = sparkJobGroupInfo.flowId
-		}
+		attrs["databricksPipelineUpdateId"] = sparkJobGroupInfo.updateId
+		attrs["databricksPipelineFlowId"] = sparkJobGroupInfo.flowId
 	} else if sparkJobGroupInfo.pipelineId != "" {
 		attrs["databricksPipelineId"] = sparkJobGroupInfo.pipelineId
 	}

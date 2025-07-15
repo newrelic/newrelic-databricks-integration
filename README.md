@@ -1048,22 +1048,6 @@ application is running on the same host).
 Note that the value must not contain a path. The path of the [Spark ReST API](https://spark.apache.org/docs/3.5.2/monitoring.html#rest-api)
 endpoints (mounted at `/api/v1`) will automatically be appended.
 
-###### `metricPrefix`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| A prefix to prepend to Spark metric names | string | N | N/a |
-
-This parameter specifies a prefix that will be prepended to each Spark metric
-name when the metric is exported to New Relic.
-
-For example, if this parameter is set to `spark.`, then the full name of the
-metric representing the value of the memory used on application executors
-(`app.executor.memoryUsed`) will be `spark.app.executor.memoryUsed`.
-
-Note that it is not recommended to leave this value empty as the metric names
-without a prefix may be ambiguous.
-
 ###### `clusterManager`
 
 | Description | Valid Values | Required | Default |
@@ -1080,94 +1064,6 @@ apply to Databricks can be specified using the Spark [`databricks`](#spark-datab
 configuration. When this parameter is not set, or is set to `standalone`, no
 additional telemetry or attributes are collected. The default value for this
 parameter is `standalone`.
-
-###### Spark `databricks`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| The root node for the set of Spark [Databricks configuration](#spark-databricks-configuration) parameters | YAML Mapping | N | N/a |
-
-This element groups together the configuration parameters to [configure](#spark-databricks-configuration)
-the Databricks specific settings when the Spark collector is collecting
-telemetry from Spark running on Databricks.
-
-##### Spark `databricks` configuration
-
-The Spark Databricks configuration parameters are used to [configure](#spark-databricks-configuration)
-the Databricks specific settings when the Spark collector is collecting
-telemetry from Spark running on Databricks.
-
-###### Spark Databricks `includeJobRunTaskRunId`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable inclusion of the task run ID in the `databricksJobRunTaskRunId` attribute for Spark job, stage, and task metrics associated with Databricks job runs | `true` / `false` | N | `false` |
-
-By default, the Spark collector will not include task run IDs on any of the
-Spark job, stage, and task metrics associated with Databricks job runs in order
-to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
-due to the fact that task run IDs have high cardinality because they are unique
-across all job task runs.
-
-This flag can be used to enable the inclusion of the task run ID in the
-`databricksJobRunTaskRunId` attribute on all Spark job, stage, and task metrics
-associated with Databricks job runs.
-
-When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
-and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
-in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
-to provide updates on limits changes.
-
-See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
-for more details.
-
-###### Spark Databricks `includePipelineUpdateId`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable inclusion of the pipeline update ID in the `databricksPipelineUpdateId` attribute for Spark job, stage, and task metrics associated with Databricks pipeline updates | `true` / `false` | N | `false` |
-
-By default, the Spark collector will not include pipeline update IDs on any of
-the Spark job, stage, and task metrics associated with Databricks pipeline
-updates in order to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
-due to the fact that pipeline update IDs have high cardinality because they are
-unique across all pipeline updates.
-
-This flag can be used to enable the inclusion of the pipeline update ID in the
-`databricksPipelineUpdateId` attribute on all Spark job, stage, and task metrics
-associated with Databricks pipeline updates.
-
-When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
-and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
-in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
-to provide updates on limits changes.
-
-See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
-for more details.
-
-###### Spark Databricks `includePipelineFlowId`
-
-| Description | Valid Values | Required | Default |
-| --- | --- | --- | --- |
-| Flag to enable inclusion of the pipeline flow ID in the `databricksPipelineFlowId` attribute for Spark job, stage, and task metrics associated with Databricks pipeline update flows | `true` / `false` | N | `false` |
-
-By default, the Spark collector will not include pipeline update flow IDs on any
-of the Spark job, stage, and task metrics associated with Databricks pipeline
-update flows in order to avoid possible violations of [metric cardinality limits](https://docs.newrelic.com/docs/data-apis/convert-to-metrics/creating-metric-rules-requirements-tips/#attributes-limit)
-due to the fact that pipeline update flow IDs have high cardinality because they
-unique across all pipeline updates.
-
-This flag can be used to enable the inclusion of the pipeline update flow ID in
-the `databricksPipelineFlowId` attribute on all Spark job, stage, and task
-metrics associated with Databricks pipeline update flows.
-
-When enabled, use the [Limits UI](https://docs.newrelic.com/docs/data-apis/manage-data/view-system-limits/#limits-ui)
-and/or create a [dashboard](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#create-a-dashboard-to-view-your-limit-status)
-in order to monitor your limit status. Additionally, [set alerts on resource metrics](https://docs.newrelic.com/docs/data-apis/manage-data/query-limits/#set-alerts-on-resource-metrics)
-to provide updates on limits changes.
-
-See the section ["Mapping Spark metrics to Databricks Jobs and Pipelines"](#mapping-spark-metrics-to-databricks-jobs-and-pipelines)
-for more details.
 
 ### Authentication
 
@@ -1225,464 +1121,455 @@ specified), Spark application metrics are collected from the [Web UI](https://sp
 URL specified in the [`webUiUrl`](#webuiurl) or from the [Web UI](https://spark.apache.org/docs/latest/web-ui.html)
 URL `https://localhost:4040` by default.
 
-#### Spark Application Metric Data
+#### Spark Application Events
 
-Spark application telemetry is sent to New Relic as [dimensional metrics](https://docs.newrelic.com/docs/data-apis/understand-data/new-relic-data-types/#dimensional-metrics).
-The provided metrics and attributes (dimensions) are listed in the sections
-below.
+Spark application telemetry is sent to New Relic as [event data](https://docs.newrelic.com/docs/data-apis/understand-data/new-relic-data-types/#event-data).
+The provided events and attributes are listed in the sections below.
 
-**NOTE:** Many of the descriptions below are sourced from the
-Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api).
+**NOTE:** Many of the descriptions in the following sections are sourced from
+the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api),
+the [Javadoc for the Spark Java API](https://spark.apache.org/docs/latest/api/java/index.html),
+and the [Apache Spark source code](https://github.com/apache/spark/tree/master).
 
-##### Spark application metric types
+##### Spark API metric types
 
 The Apache Spark monitoring [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api)
 returns two types of metrics: monotonically increasing counters (referred to
 below simply as "counters") and gauges, with the majority of metrics being
-counters.
+counters. Both types of metrics are stored as numeric attributes on the New
+Relic events generated by the integration for Apache Spark data.
 
-While all gauge metrics returned from the [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api)
-are created as gauge metrics within New Relic, note that all counter metrics
-returned from the [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api)
-are also created as gauge metrics. While the `latest()`, `min()`, `max()`,
-`sum()`, `count()`, and `average()` [NRQL aggregator functions](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#aggregator-functions)
-are all therefore available for use with these metrics, only [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
-will provide meaningful results (e.g. taking the average of a set of data points
-that represent a monotonically increasing counter makes no sense).
+Unlike gauges, counter metrics are additive. Each successive value of a counter
+metric will include the previous value of the metric. The metric is _not_ reset
+to zero each time it is reported. Because of this, only the [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
+aggregator function will provide meaningful results when visualizing or alerting
+on these metrics (e.g. taking the average of a set of data points that represent
+a monotonically increasing counter makes no sense). Aggregation functions such
+as `average()` and `median()` can not, unfortunately, be used with these counter
+metrics.
 
-Therefore, in general, only the [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
-aggregator function should be used when visualizing or alerting on metrics
-listed in the sections below with the metric type `counter`.
+For example, the `totalTaskDuration` metric on the `SparkExecutorSample` event
+is a counter which will be reported each time the integration collects Spark
+executor metrics. As more tasks run on the executor, the `totalTaskDuration`
+will increase by the duration of each task as depicted below.
 
-Further to this, even when using the [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
-aggregator function, the metrics have no meaning without an identifying `FACET`.
+| Collection time | Task duration delta | Reported `totalTaskDuration` |
+| --- | --- | --- |
+| `00s` | `500ms` | `500` |
+| `30s` | `5000ms` | `5500` |
+| `60s` | `00ms` | `5500` |
+| `90s` | `15000ms` | `20500` |
 
-As an example, to show the total number of completed tasks by executor ID, use
-the query `SELECT latest(app.executor.completedTasks) FROM Metric FACET sparkAppName, sparkAppExecutorId`
-and not `SELECT count(app.executor.completedTasks) FROM Metric FACET sparkAppName, sparkAppExecutorId`.
-Using `count()` on a gauge metric accesses the `count` field of the metric which
-in this case is always `1` even though the metric being represented is a
-counter. The counter value is actually in the `latest` field of the metric.
-Further, using the metric _without_ faceting by the executor ID will only return
-the latest `app.executor.completedTasks` metric in the selected time window and
-ignore any other instances of that metric in the same time window.
+In this case, using the `average()` aggregator function on `totalTaskDuration`
+would yield `8000ms` but the actual average task duration is `5125ms`.
 
-##### Common Spark application metric attributes
+Counter metrics which are reported on multiple samples are indicated below with
+the text `(counter)`.
 
-The following attributes are included on _all_ Spark application metrics.
+##### Common Spark application event attributes
+
+The following attributes are included on _all_ Spark application events.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
 | `sparkAppId` | string | Spark application ID |
 | `sparkAppName` | string | Spark application name |
+| `databricksWorkspaceId` | string | **Databricks only** [ID](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) of the Databricks workspace of the Databricks cluster running the application |
+| `databricksWorkspaceName` | string | **Databricks only** [Instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) of the Databricks workspace of the Databricks cluster running the application |
+| `databricksWorkspaceUrl` | string | **Databricks only** [URL](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) of the Databricks workspace of the Databricks cluster running the application |
 | `databricksClusterId` | string | **Databricks only** Databricks cluster ID |
 | `databricksClusterName` | string | **Databricks only** Databricks cluster name |
 
-##### Spark application metrics
+##### Spark application executor data
 
-The following metrics are included for each Spark application.
+Each time the integration collects Spark executor metrics, it reports one
+`SparkExecutorSample` event for each Spark executor in each Spark application.
 
-| Attribute Name | Data Type | Description |
-| --- | --- | --- |
-| `app.jobs` | string | Spark job [counts](#spark-job-stage-and-task-counts) by job [status](#spark-job-stage-and-task-status) |
-| `app.stages` | string | Spark stage [counts](#spark-job-stage-and-task-counts) by stage [status](#spark-job-stage-and-task-status) |
-
-##### Spark application executor metrics
-
-The following metrics are included for each Spark application executor. Metrics
-are scoped to a given executor using the `sparkAppExecutorId` [attribute](#spark-application-executor-attributes).
-
-| Metric Name | Metric Type | Description |
-| --- | --- | --- |
-| `app.executor.rddBlocks` | gauge | RDD blocks in the block manager of this executor |
-| `app.executor.memoryUsed` | gauge | Storage memory used by this executor |
-| `app.executor.diskUsed` | gauge | Disk space used for RDD storage by this executor |
-| `app.executor.totalCores` | counter | Number of cores available in this executor |
-| `app.executor.maxTasks` | counter | Maximum number of tasks that can run concurrently in this executor |
-| `app.executor.activeTasks` | gauge | Number of tasks currently executing |
-| `app.executor.failedTasks` | counter | Number of tasks that have failed in this executor |
-| `app.executor.completedTasks` | counter | Number of tasks that have completed in this executor |
-| `app.executor.totalTasks` | counter | Total number of tasks (running, failed and completed) in this executor |
-| `app.executor.totalDuration` | counter | Elapsed time the JVM spent executing tasks in this executor. The value is expressed in milliseconds. |
-| `app.executor.totalGCTime` | counter | Elapsed time the JVM spent in garbage collection summed in this executor. The value is expressed in milliseconds. |
-| `app.executor.totalInputBytes` | counter | Total input bytes summed in this executor |
-| `app.executor.totalShuffleRead` | counter | Total shuffle read bytes summed in this executor |
-| `app.executor.totalShuffleWrite` | counter | Total shuffle write bytes summed in this executor |
-| `app.executor.maxMemory` | gauge | Total amount of memory available for storage, in bytes |
-| `app.executor.memory.usedOnHeapStorage` | gauge | Used on heap memory currently for storage, in bytes |
-| `app.executor.memory.usedOffHeapStorage` | gauge | Used off heap memory currently for storage, in bytes |
-| `app.executor.memory.totalOnHeapStorage` | gauge | Total available on heap memory for storage, in bytes. This amount can vary over time, on the MemoryManager implementation. |
-| `app.executor.memory.totalOffHeapStorage` | gauge | Total available off heap memory for storage, in bytes. This amount can vary over time, depending on the MemoryManager implementation. |
-| `app.executor.memory.peak.jvmHeap` | counter | Peak memory usage of the heap that is used for object allocation by the Java virtual machine |
-| `app.executor.memory.peak.jvmOffHeap` | counter | Peak memory usage of non-heap memory that is used by the Java virtual machine |
-| `app.executor.memory.peak.onHeapExecution` | counter | Peak on heap execution memory usage, in bytes |
-| `app.executor.memory.peak.offHeapExecution` | counter | Peak off heap execution memory usage, in bytes |
-| `app.executor.memory.peak.onHeapStorage` | counter | Peak on heap storage memory usage, in bytes |
-| `app.executor.memory.peak.offHeapStorage` | counter | Peak off heap storage memory usage, in bytes |
-| `app.executor.memory.peak.onHeapUnified` | counter | Peak on heap memory usage (execution and storage) |
-| `app.executor.memory.peak.offHeapUnified` | counter | Peak off heap memory usage (execution and storage) |
-| `app.executor.memory.peak.directPool` | counter | Peak JVM memory usage for direct buffer pool (java.lang.management.BufferPoolMXBean) |
-| `app.executor.memory.peak.mappedPool` | counter | Peak JVM memory usage for mapped buffer pool (java.lang.management.BufferPoolMXBean) |
-| `app.executor.memory.peak.nettyDirect` | counter | **Databricks only** |
-| `app.executor.memory.peak.jvmDirect` | counter | **Databricks only** |
-| `app.executor.memory.peak.sparkDirectMemoryOverLimit` | counter | **Databricks only** |
-| `app.executor.memory.peak.totalOffHeap` | counter | **Databricks only** |
-| `app.executor.memory.peak.processTreeJvmVirtual` | counter | Peak virtual memory size, in bytes |
-| `app.executor.memory.peak.processTreeJvmRSS` | counter | Peak Resident Set Size (number of pages the process has in real memory) |
-| `app.executor.memory.peak.processTreePythonVirtual` | counter | Peak virtual memory size for Python, in bytes |
-| `app.executor.memory.peak.processTreePythonRSS` | counter | Peak resident Set Size for Python |
-| `app.executor.memory.peak.processTreeOtherVirtual` | counter | Peak virtual memory size for other kinds of processes, in bytes |
-| `app.executor.memory.peak.processTreeOtherRSS` | counter | Peak resident Set Size for other kinds of processes |
-| `app.executor.memory.peak.minorGCCount` | counter | Total number of minor GCs that have occurred |
-| `app.executor.memory.peak.minorGCTime` | counter | Total elapsed time spent doing minor GCs. The value is expressed in milliseconds. |
-| `app.executor.memory.peak.majorGCCount` | counter | Total number of major GCs that have occurred |
-| `app.executor.memory.peak.majorGCTime` | counter | Total elapsed time spent doing major GCs. The value is expressed in milliseconds. |
-| `app.executor.memory.peak.totalGCTime` | counter | Total elapsed time spent doing GC (major + minor). The value is expressed in milliseconds. |
-
-##### Spark application executor attributes
-
-The following attributes are included on all [Spark application executor metrics](#spark-application-executor-metrics).
+Each `SparkExecutorSample` event includes the following attributes.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
-| `sparkAppExecutorId` | string | Spark executor ID |
+| `executorId` | string | ID of the executor within the Spark application |
+| `isActive` | boolean | `true` if the executor is currently active, otherwise `false` |
+| `isExcluded` | boolean | `true` if the executor has been excluded from task scheduling, otherwise `false` |
+| `isBlacklisted` | boolean | `true` if the executor has been marked as blacklisted, otherwise `false` |
+| `addTime` | number | The time the executor was added, in milliseconds since the epoch |
+| `rddBlockCount` | number | RDD blocks in the block manager of this executor |
+| `memoryUsedBytes` | number | Storage memory used by this executor |
+| `diskUsedBytes` | number | Disk space used for RDD storage by this executor |
+| `coreCount` | number (counter) | Number of cores available in this executor |
+| `maxTasks` | number (counter) | Maximum number of tasks that can run concurrently in this executor |
+| `activeTaskCount` | number | Number of tasks currently executing |
+| `failedTaskCount` | number (counter) | Number of tasks that have failed in this executor |
+| `completedTaskCount` | number (counter) | Number of tasks that have completed in this executor |
+| `taskCount` | number (counter) | Total number of tasks (running, failed and completed) in this executor |
+| `taskDuration` | number (counter) | Elapsed time the JVM spent executing tasks in this executor. The value is expressed in milliseconds. |
+| `gcDuration` | number (counter) | Elapsed time the JVM spent in garbage collection summed in this executor. The value is expressed in milliseconds. |
+| `inputBytes` | number (counter) | Total input bytes summed in this executor |
+| `shuffleReadBytes` | number (counter) | Total shuffle read bytes summed in this executor |
+| `shuffleWriteBytes` | number (counter) | Total shuffle write bytes summed in this executor |
+| `memoryTotalBytes` | gauge | Total amount of memory available for storage, in bytes |
+| `onHeapMemoryUsedBytes` | gauge | Used on heap memory currently for storage, in bytes |
+| `offHeapMemoryUsedBytes` | gauge | Used off heap memory currently for storage, in bytes |
+| `onHeapMemoryTotalBytes` | gauge | Total available on heap memory for storage, in bytes. This amount can vary over time, on the MemoryManager implementation. |
+| `offHeapMemoryTotalBytes` | gauge | Total available off heap memory for storage, in bytes. This amount can vary over time, depending on the MemoryManager implementation. |
+| `peakJvmHeapMemoryUsedBytes` | number (counter) | Peak memory usage of the heap that is used for object allocation by the Java virtual machine |
+| `peakJvmOffHeapMemoryUsedBytes` | number (counter) | Peak memory usage of non-heap memory that is used by the Java virtual machine |
+| `peakOnHeapExecutionMemoryUsedBytes` | number (counter) | Peak on heap execution memory usage, in bytes |
+| `peakOffHeapExecutionMemoryUsedBytes` | number (counter) | Peak off heap execution memory usage, in bytes |
+| `peakOnHeapStorageMemoryUsedBytes` | number (counter) | Peak on heap storage memory usage, in bytes |
+| `peakOffHeapStorageMemoryUsedBytes` | number (counter) | Peak off heap storage memory usage, in bytes |
+| `peakOnHeapUnifiedMemoryUsedBytes` | number (counter) | Peak on heap memory usage (execution and storage) |
+| `peakOffHeapUnifiedMemoryUsedBytes` | number (counter) | Peak off heap memory usage (execution and storage) |
+| `peakDirectPoolMemoryUsedBytes` | number (counter) | Peak JVM memory usage for direct buffer pool (java.lang.management.BufferPoolMXBean) |
+| `peakMappedPoolMemoryUsedBytes` | number (counter) | Peak JVM memory usage for mapped buffer pool (java.lang.management.BufferPoolMXBean) |
+| `peakProcessTreeJvmVirtualBytes` | number (counter) | Peak virtual memory size, in bytes |
+| `peakProcessTreeJvmRSS` | number (counter) | Peak Resident Set Size (number of pages the process has in real memory) |
+| `peakProcessTreePythonVirtualBytes` | number (counter) | Peak virtual memory size for Python, in bytes |
+| `peakProcessTreePythonRSS` | number (counter) | Peak resident Set Size for Python |
+| `peakProcessTreeOtherVirtualBytes` | number (counter) | Peak virtual memory size for other kinds of processes, in bytes |
+| `peakProcessTreeOtherRSS` | number (counter) | Peak resident Set Size for other kinds of processes |
+| `peakMinorGCCount` | number (counter) | Total number of minor GCs that have occurred |
+| `peakMinorGCDuration` | number (counter) | Total elapsed time spent doing minor GCs. The value is expressed in milliseconds. |
+| `peakMajorGCCount` | number (counter) | Total number of major GCs that have occurred |
+| `peakMajorGCDuration` | number (counter) | Total elapsed time spent doing major GCs. The value is expressed in milliseconds. |
+| `peakTotalGCDuration` | number (counter) | Total elapsed time spent doing GC (major + minor). The value is expressed in milliseconds. |
+| `peakNettyDirectMemory` | number (counter) | **Databricks only** |
+| `peakJvmDirectMemory` | number (counter) | **Databricks only** |
+| `peakSparkDirectMemoryOverLimit` | number (counter) | **Databricks only** |
+| `peakTotalOffHeapMemory` | number (counter) | **Databricks only** |
 
-##### Spark application job metrics
+##### Spark application job data
 
-The following metrics are included for each Spark job in an application. Metrics
-are scoped to a given job and status using the `sparkAppJobId` and
-`sparkAppJobStatus` [attributes](#spark-application-job-attributes).
+The integration records a start event for each job that starts while the
+integration is running and a complete event for each job that completes while
+the integration is running. Both events are reported using the `SparkJob` event
+type. The `event` attribute on the `SparkJob` event can be used to differentiate
+between the start event (the `event` attribute will be set to `start`) and the
+complete event (the `event` attribute will be set to `complete`).
 
-| Metric Name | Metric Type | Description |
-| --- | --- | --- |
-| `app.job.duration` | counter | Duration of the job. The value is expressed in milliseconds. |
-| `app.job.stages` | gauge (for `active` and `complete` [status](#spark-job-stage-and-task-status)) / counter (for `skipped` and `failed` [status](#spark-job-stage-and-task-status)) | Spark stage [counts](#spark-job-stage-and-task-counts) by stage [status](#spark-job-stage-and-task-status) |
-| `app.job.tasks` | gauge (for `active` [status](#spark-job-stage-and-task-status)) / counter (for `complete`, `skipped`, `failed`, and `killed` [status](#spark-job-stage-and-task-status)) | Spark task [counts](#spark-job-stage-and-task-counts) by task [status](#spark-job-stage-and-task-status) |
-| `app.job.indices.completed` | counter | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
-
-##### Spark application job attributes
-
-The following attributes are included on all [Spark application job metrics](#spark-application-job-metrics).
+Each `SparkJob` start event includes the following attributes.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
-| `sparkAppJobId` | number | Spark job ID |
-| `sparkAppJobStatus` | string | Spark job [status](#spark-job-stage-and-task-status) |
-| `sparkAppStageStatus` | string | Spark stage [status](#spark-job-stage-and-task-status). Only on `app.job.stages` metric. |
-| `sparkAppTaskStatus` | string | Spark task [status](#spark-job-stage-and-task-status). Only on `app.job.tasks` metric. |
+| `event` | string | Set to `start` for a start event and `complete` for a complete event |
+| `jobId` | number | Spark job ID |
+| `jobName` | string | Spark job name |
+| `jobGroup` | string | Spark job group |
+| `jobTags` | string | Comma-separated list of Spark [job tags](https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.SparkContext.getJobTags.html) |
+| `description` | string | Spark job description (value of the Spark context property `spark.job.description`) |
+| `submissionTime` | number | Time the job was submitted, in milliseconds since the epoch |
 
-##### Spark application stage metrics
+Each `SparkJob` complete event includes all the attributes on the start event
+plus the following additional attributes.
 
-The following metrics are included for each Spark stage in an application.
-Metrics are scoped to a given stage and status using the `sparkAppStageId`,
-`sparkAppStageAttemptId`, `sparkAppStageName`, and `sparkAppStageStatus`
-[attributes](#spark-application-stage-attributes).
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `status` | string | Spark job [status](#spark-job-stage-and-task-status) |
+| `completionTime` | number | Time the job completed, in milliseconds since the epoch |
+| `duration` | number | Duration of the job. The value is expressed in milliseconds. |
+| `completedIndexCount` | number | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
+| `activeStageCount` | number | The number of stages currently running. This number should always be `0` as there should be no stages running once a job has completed. |
+| `completedStageCount` | number | The number of stages that completed successfully |
+| `skippedStageCount` | number | The number of stages that were skipped for this job |
+| `failedStageCount` | number | The number of stages that failed for this job |
+| `taskCount` | number | The number of tasks for this job |
+| `activeTaskCount` | number | The number of tasks currently running for this job. This number should always be `0` as there should be no tasks running once a job has completed. |
+| `completedTaskCount` | number | The number of tasks that completed successfully for this job |
+| `skippedTaskCount` | number | The number of tasks that were skipped for this job |
+| `failedTaskCount` | number | The number of tasks that failed for this job |
+| `killedTaskCount` | number | The number of tasks that were killed for this job |
+
+##### Spark application stage data
+
+The integration records a start event for each stage that starts while the
+integration is running and a complete event for each stage that completes while
+the integration is running. Both events are reported using the `SparkStage`
+event type. The `event` attribute on the `SparkStage` event can be used to
+differentiate between the start event (the `event` attribute will be set to
+`start`) and the complete event (the `event` attribute will be set to
+`complete`).
 
 **NOTE:** The metrics in this section are not documented in the
 Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api).
-The descriptions provided below were deduced via source code analysis and are
-not determinate.
+The descriptions provided below were deduced primarily via analysis of the
+[Apache Spark source code](https://github.com/apache/spark/tree/master) and
+are not necessarily determinate.
 
-| Metric Name | Metric Type | Description |
-| --- | --- | --- |
-| `app.stage.tasks` | gauge (for `active`, `pending`, and `complete` [status](#spark-job-stage-and-task-status)) / counter (for `skipped` and `failed` [status](#spark-job-stage-and-task-status)) | Spark task [counts](#spark-job-stage-and-task-counts) by task [status](#spark-job-stage-and-task-status) |
-| `app.stage.tasks.total` | counter | Total number of tasks for the named stage |
-| `app.stage.duration` | counter | Duration of the stage. The value is expressed in milliseconds. |
-| `app.stage.indices.completed` | counter | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
-| `app.stage.peakNettyDirectMemory` | counter | **Databricks only**  |
-| `app.stage.peakJvmDirectMemory` | counter | **Databricks only**  |
-| `app.stage.peakSparkDirectMemoryOverLimit` | counter | **Databricks only** |
-| `app.stage.peakTotalOffHeapMemory` | counter | **Databricks only** |
-| `app.stage.executor.deserializeTime` | counter | Total elapsed time spent by executors deserializing tasks for the named stage. The value is expressed in milliseconds. |
-| `app.stage.executor.deserializeCpuTime` | counter | Total CPU time spent by executors to deserialize tasks for the named stage. The value is expressed in nanoseconds. |
-| `app.stage.executor.runTime` | counter | Total elapsed time spent running tasks on executors for the named stage. The value is expressed in milliseconds. |
-| `app.stage.executor.cpuTime` | counter | Total CPU time spent running tasks on executors for the named stage. This includes time fetching shuffle data. The value is expressed in nanoseconds. |
-| `app.stage.resultSize` | counter | The total number of bytes transmitted back to the driver by all tasks for the named stage |
-| `app.stage.jvmGcTime` | counter | Total elapsed time the JVM spent in garbage collection while executing tasks for the named stage. The value is expressed in milliseconds. |
-| `app.stage.resultSerializationTime` | gauge | Total elapsed time spent serializing task results for the named stage. The value is expressed in milliseconds. |
-| `app.stage.memoryBytesSpilled` | counter | Sum of the in-memory bytes spilled by all tasks for the named stage |
-| `app.stage.diskBytesSpilled` | counter | Sum of the number of on-disk bytes spilled by all tasks for the named stage |
-| `app.stage.peakExecutionMemory` | counter | Sum of the peak memory used by internal data structures created during shuffles, aggregations and joins by all tasks for the named stage |
-| `app.stage.inputBytes` | counter | Sum of the number of bytes read from org.apache.spark.rdd.HadoopRDD or from persisted data by all tasks for the named stage |
-| `app.stage.inputRecords` | counter | Sum of the number of records read from org.apache.spark.rdd.HadoopRDD or from persisted data by all tasks for the named stage |
-| `app.stage.outputBytes` | counter | Sum of the number of bytes written externally (e.g. to a distributed filesystem) by all tasks with output for the named stage |
-| `app.stage.outputRecords` | counter | Sum of the number of records written externally (e.g. to a distributed filesystem) by all tasks with output for the named stage |
-| `app.stage.shuffle.remoteBlocksFetched` | counter | Sum of the number of remote blocks fetched in shuffle operations by all tasks for the named stage  |
-| `app.stage.shuffle.localBlocksFetched` | counter | Sum of the number of local (as opposed to read from a remote executor) blocks fetched in shuffle operations by all tasks for the named stage |
-| `app.stage.shuffle.fetchWaitTime` | counter | Total time tasks spent waiting for remote shuffle blocks for the named stage |
-| `app.stage.shuffle.remoteBytesRead` | counter | Sum of the number of remote bytes read in shuffle operations by all task for the named stages |
-| `app.stage.shuffle.remoteBytesReadToDisk` | counter | Sum of the number of remote bytes read to disk in shuffle operations by all tasks for the named stage |
-| `app.stage.shuffle.localBytesRead` | counter | Sum of the number of bytes read in shuffle operations from local disk (as opposed to read from a remote executor) by all tasks for the named stage |
-| `app.stage.shuffle.readBytes` | counter | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
-| `app.stage.shuffle.readRecords` | counter | Sum of the number of records read in shuffle operations by all tasks for the named stage |
-| `app.stage.shuffle.corruptMergedClockChunks` | counter | Sum of the number of corrupt merged shuffle block chunks encountered by all tasks (remote or local) for the named stage |
-| `app.stage.shuffle.mergedFetchFallbackCount` | counter | Sum of the number of times tasks had to fallback to fetch original shuffle blocks for a merged shuffle block chunk (remote or local) for the named stage |
-| `app.stage.shuffle.mergedRemoteBlocksFetched` | counter | Sum of the number of remote merged blocks fetched by all tasks for the named stage  |
-| `app.stage.shuffle.mergedLocalBlocksFetched` | counter | Sum of the number of local merged blocks fetched by all tasks for the named stage |
-| `app.stage.shuffle.mergedRemoteChunksFetched` | counter | Sum of the number of remote merged chunks fetched by all tasks for the named stage |
-| `app.stage.shuffle.mergedLocalChunksFetched` | counter | Sum of the number of local merged chunks fetched by all tasks for the named stage |
-| `app.stage.shuffle.mergedRemoteBytesRead` | counter | Sum of the number of remote merged bytes read by all tasks for the named stage |
-| `app.stage.shuffle.mergedLocalBytesRead` | counter | Sum of the number of local merged bytes read by all tasks for the named stage |
-| `app.stage.shuffle.remoteReqsDuration` | counter | Total time tasks took executing remote requests for the named stage |
-| `app.stage.shuffle.mergedRemoteReqsDuration` | counter | Total time tasks took executing remote merged requests for the named stage |
-| `app.stage.shuffle.writeBytes` | counter | Sum of the number of bytes written in shuffle operations by all tasks for the named stage |
-| `app.stage.shuffle.writeTime` | counter | Total time tasks spent blocking on writes to disk or buffer cache for the named stage. The value is expressed in nanoseconds. |
-| `app.stage.shuffle.writeRecords` | counter | Sum of the number of records written in shuffle operations by all tasks for the named stage |
-| `app.stage.executor.memory.peak.jvmHeap` | counter | Peak memory usage of the heap that is used for object allocation by the Java virtual machine while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.jvmOffHeap` | counter | Peak memory usage of non-heap memory by the Java virtual machine while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.onHeapExecution` | counter | Peak on heap execution memory usage while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.offHeapExecution` | counter | Peak off heap execution memory usage while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.onHeapStorage` | counter | Peak on heap storage memory usage while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.offHeapStorage` | counter | Peak off heap storage memory usage while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.onHeapUnified` | counter | Peak on heap memory usage (execution and storage) while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.offHeapUnified` | counter | Peak off heap memory usage (execution and storage) while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.directPool` | counter | Peak JVM memory usage for the direct buffer pool (java.lang.management.BufferPoolMXBean) while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.mappedPool` | counter | Peak JVM memory usage for the mapped buffer pool (java.lang.management.BufferPoolMXBean) while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.processTreeJvmVirtual` | counter | Peak virtual memory size while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.processTreeJvmRSS` | counter | Peak Resident Set Size (number of pages the process has in real memory) while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.processTreePythonVirtual` | counter | Peak virtual memory size for Python while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.processTreePythonRSS` | counter | Peak Resident Set Size for Python while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.processTreeOtherVirtual` | counter | Peak virtual memory size for other kinds of processes while executing tasks for the named stage, in bytes |
-| `app.stage.executor.memory.peak.processTreeOtherRSS` | counter | Peak resident Set Size for other kinds of processes while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.minorGCCount` | counter | Total number of minor GCs that occurred while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.minorGCTime` | counter | Total elapsed time spent doing minor GCs while executing tasks for the named stage. The value is expressed in milliseconds. |
-| `app.stage.executor.memory.peak.majorGCCount` | counter | Total number of major GCs that occurred while executing tasks for the named stage |
-| `app.stage.executor.memory.peak.majorGCTime` | counter | Total elapsed time spent doing major GCs while executing tasks for the named stage. The value is expressed in milliseconds. |
-| `app.stage.executor.memory.peak.totalGCTime` | counter | Total elapsed time spent doing GC while executing tasks for the named stage. The value is expressed in milliseconds. |
-
-##### Spark application stage attributes
-
-The following attributes are included on all [Spark application stage metrics](#spark-application-stage-metrics).
+Each `SparkStage` start event includes the following attributes.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
-| `sparkAppStageId` | string | Spark stage ID |
-| `sparkAppStageAttemptId` | number | Spark stage attempt ID |
-| `sparkAppStageName` | string | Spark stage name |
-| `sparkAppStageStatus` | string | Spark stage [status](#spark-job-stage-and-task-status) |
-| `sparkAppTaskStatus` | string | Spark task [status](#spark-job-stage-and-task-status). Only on `app.stage.tasks` metric. |
+| `event` | string | Set to `start` for a start event and `complete` for a complete event |
+| `stageId` | number | Spark stage ID |
+| `stageName` | string | Spark stage name (call site short form) |
+| `jobDescription` | string | Description (value of the Spark context property `spark.job.description`) of the job for this stage  |
+| `details` | string | Spark stage details (call site long form) |
+| `attemptId` | number | Spark stage attempt ID |
+| `schedulingPool` | string | Name of the Spark fair scheduler pool that this stage is a part of |
+| `resourceProfileId` | number | ID of the resource profile applied during this stage |
+| `submissionTime` | number | Time the stage was submitted, in milliseconds since the epoch |
+| `firstTaskLaunchedTime` | number | Time the first task for this stage was launched, in milliseconds since the epoch |
 
-##### Spark application stage task metrics
-
-The following metrics are included for each Spark task in an application.
-Metrics are scoped to a given stage and status using the `sparkAppStageId`,
-`sparkAppStageAttemptId`, `sparkAppStageName`, and `sparkAppStageStatus`
-[attributes](#spark-application-stage-attributes). They are also scoped to a
-given task and status using the `sparkAppTaskId`, `sparkAppTaskAttempt`, and
-`sparkAppTaskStatus` [attributes](#spark-application-stage-task-attributes) and
-scoped to the executor of the task using the `sparkAppTaskExecutorId` attribute.
-
-**NOTE:** Some of the shuffle read metric descriptions below are sourced from
-the file [ShuffleReadMetrics.scala](https://github.com/apache/spark/blob/master/core/src/main/scala/org/apache/spark/executor/ShuffleReadMetrics.scala).
-
-| Metric Name | Metric Type | Description |
-| --- | --- | --- |
-| `app.stage.task.duration` | counter | Duration of the task. The value is expressed in milliseconds. |
-| `app.stage.task.executorDeserializeTime` | counter | Elapsed time spent to deserialize this task. The value is expressed in milliseconds. |
-| `app.stage.task.executorDeserializeCpuTime` | counter | CPU time taken on the executor to deserialize this task. The value is expressed in nanoseconds. |
-| `app.stage.task.executorRunTime` | counter | Elapsed time the executor spent running this task. This includes time fetching shuffle data. The value is expressed in milliseconds. |
-| `app.stage.task.executorCpuTime` | counter | CPU time the executor spent running this task. This includes time fetching shuffle data. The value is expressed in nanoseconds. |
-| `app.stage.task.resultSize` | counter | The number of bytes this task transmitted back to the driver as the TaskResult |
-| `app.stage.task.jvmGcTime` | counter | Elapsed time the JVM spent in garbage collection while executing this task. The value is expressed in milliseconds. |
-| `app.stage.task.resultSerializationTime` | counter | Elapsed time spent serializing the task result. The value is expressed in milliseconds. |
-| `app.stage.task.memoryBytesSpilled` | counter | The number of in-memory bytes spilled by this task |
-| `app.stage.task.diskBytesSpilled` | counter | The number of on-disk bytes spilled by this task |
-| `app.stage.task.peakExecutionMemory` | counter | Peak memory used by internal data structures created during shuffles, aggregations and joins. The value of this accumulator should be approximately the sum of the peak sizes across all such data structures created in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort. |
-| `app.stage.task.input.bytesRead` | counter | Total number of bytes read from org.apache.spark.rdd.HadoopRDD or from persisted data |
-| `app.stage.task.input.recordsRead` | counter | Total number of records read from org.apache.spark.rdd.HadoopRDD or from persisted data |
-| `app.stage.task.output.bytesWritten` | counter | Total number of bytes written externally (e.g. to a distributed filesystem). Defined only in tasks with output. |
-| `app.stage.task.output.recordsWritten` | counter | Total number of records written externally (e.g. to a distributed filesystem). Defined only in tasks with output. |
-| `app.stage.task.shuffle.read.remoteBlocksFetched` | counter | Number of remote blocks fetched in shuffle operations |
-| `app.stage.task.shuffle.read.localBlocksFetched` | counter | Number of local (as opposed to read from a remote executor) blocks fetched in shuffle operations |
-| `app.stage.task.shuffle.read.totalBlocksFetched` | gauge | **TODO: Not yet implemented** |
-| `app.stage.task.shuffle.read.fetchWaitTime` | counter | Time the task spent waiting for remote shuffle blocks. This only includes the time blocking on shuffle input data. For instance if block B is being fetched while the task is still not finished processing block A, it is not considered to be blocking on block B. The value is expressed in milliseconds. |
-| `app.stage.task.shuffle.read.remoteBytesRead` | counter | Number of remote bytes read in shuffle operations |
-| `app.stage.task.shuffle.read.remoteBytesReadToDisk` | counter | Number of remote bytes read to disk in shuffle operations. Large blocks are fetched to disk in shuffle read operations, as opposed to being read into memory, which is the default behavior |
-| `app.stage.task.shuffle.read.localBytesRead` | counter | Number of bytes read in shuffle operations from local disk (as opposed to read from a remote executor) |
-| `app.stage.task.shuffle.read.totalBytesRead` | gauge | **TODO: Not yet implemented** |
-| `app.stage.task.shuffle.read.recordsRead` | counter | Number of records read in shuffle operations |
-| `app.stage.task.shuffle.read.remoteReqsDuration` | counter | Total time taken for remote requests to complete by this task. This doesn't include duration of remote merged requests. |
-| `app.stage.task.shuffle.read.push.corruptMergedBlockChunks` | counter | Number of corrupt merged shuffle block chunks encountered by this task (remote or local) |
-| `app.stage.task.shuffle.read.push.mergedFetchFallbackCount` | counter | Number of times the task had to fallback to fetch original shuffle blocks for a merged shuffle block chunk (remote or local) |
-| `app.stage.task.shuffle.read.push.remoteMergedBlocksFetched` | counter | Number of remote merged blocks fetched  |
-| `app.stage.task.shuffle.read.push.localMergedBlocksFetched` | counter | Number of local merged blocks fetched |
-| `app.stage.task.shuffle.read.push.remoteMergedChunksFetched` | counter | Number of remote merged chunks fetched |
-| `app.stage.task.shuffle.read.push.localMergedChunksFetched` | counter | Number of local merged chunks fetched |
-| `app.stage.task.shuffle.read.push.remoteMergedBytesRead` | counter | Total number of remote merged bytes read |
-| `app.stage.task.shuffle.read.push.localMergedBytesRead` | counter | Total number of local merged bytes read |
-| `app.stage.task.shuffle.read.push.remoteMergedReqsDuration` | counter | Total time taken for remote merged requests |
-| `app.stage.task.shuffle.write.bytesWritten` | counter | Number of bytes written in shuffle operations |
-| `app.stage.task.shuffle.write.writeTime` | counter | Time spent blocking on writes to disk or buffer cache. The value is expressed in nanoseconds. |
-| `app.stage.task.shuffle.write.recordsWritten` | counter | Number of records written in shuffle operations |
-| `app.stage.task.photon.offHeapMinMemorySize` |  | **Databricks only** |
-| `app.stage.task.photon.offHeapMaxMemorySize` |  | **Databricks only** |
-| `app.stage.task.photon.photonBufferPoolMinMemorySize` |  | **Databricks only** |
-| `app.stage.task.photon.photonBufferPoolMaxMemorySize` |  | **Databricks only** |
-| `app.stage.task.photon.photonizedTaskTimeNs` |  | **Databricks only** |
-
-##### Spark application stage task attributes
-
-The following attributes are included on all [Spark application stage task metrics](#spark-application-stage-task-metrics).
+Each `SparkStage` complete event includes all the attributes on the start event
+plus the following additional attributes.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
-| `sparkAppStageId` | string | Spark stage ID |
-| `sparkAppStageAttemptId` | number | Spark stage attempt ID |
-| `sparkAppStageName` | string | Spark stage name |
-| `sparkAppStageStatus` | string | Spark stage [status](#spark-job-stage-and-task-status) |
-| `sparkAppTaskId` | string | Spark task ID |
-| `sparkAppTaskAttempt` | number | Spark task attempt number |
-| `sparkAppTaskStatus` | string | Spark task [status](#spark-job-stage-and-task-status) |
-| `sparkAppTaskLocality` | string | [Locality](https://spark.apache.org/docs/3.5.4/tuning.html#data-locality) of the data this task operates on |
-| `sparkAppTaskSpeculative` | boolean | `true` if this is a [speculative task execution](https://kb.databricks.com/scala/understanding-speculative-execution), otherwise `false` |
-| `sparkAppTaskExecutorId` | string | Spark executor ID |
+| `status` | string | Spark stage [status](#spark-job-stage-and-task-status) |
+| `completionTime` | number | Time the stage completed, in milliseconds since the epoch |
+| `duration` | number | Duration of the stage. The value is the number of milliseconds between the completion time and the first task launched time. |
+| `taskCount` | number | Number of tasks for this stage |
+| `activeTaskCount` | number | The number of tasks currently running for this stage. This number should always be `0` as there should be no tasks running once a stage has completed. |
+| `completedTaskCount` | number | The number of tasks that completed successfully for this stage |
+| `failedTaskCount` | number | The number of tasks that failed for this stage |
+| `killedTaskCount` | number | The number of tasks that were killed for this stage |
+| `completedIndexCount` | number | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
+| `executorDeserializeDuration` | number | Total elapsed time spent by executors deserializing tasks for the named stage. The value is expressed in milliseconds. |
+| `executorDeserializeCpuDuration` | number | Total CPU time spent by executors to deserialize tasks for the named stage. The value is expressed in nanoseconds. |
+| `executorRunDuration` | number | Total elapsed time spent running tasks on executors for the named stage. The value is expressed in milliseconds. |
+| `executorCpuDuration` | number | Total CPU time spent running tasks on executors for the named stage. This includes time fetching shuffle data. The value is expressed in nanoseconds. |
+| `resultSizeBytes` | number | The total number of bytes transmitted back to the driver by all tasks for the named stage |
+| `gcDuration` | number | Total elapsed time the JVM spent in garbage collection while executing tasks for the named stage. The value is expressed in milliseconds. |
+| `resultSerializationDuration` | number | Total elapsed time spent serializing task results for the named stage. The value is expressed in milliseconds. |
+| `memorySpilledBytes` | number | Sum of the in-memory bytes spilled by all tasks for the named stage |
+| `diskSpilledBytes` | number | Sum of the number of on-disk bytes spilled by all tasks for the named stage |
+| `peakExecutionMemoryUsedBytes` | number | Sum of the peak memory used by internal data structures created during shuffles, aggregations and joins by all tasks for the named stage |
+| `inputBytes` | number | Sum of the number of bytes read from org.apache.spark.rdd.HadoopRDD or from persisted data by all tasks for the named stage |
+| `inputRecords` | number | Sum of the number of records read from org.apache.spark.rdd.HadoopRDD or from persisted data by all tasks for the named stage |
+| `outputBytes` | number | Sum of the number of bytes written externally (e.g. to a distributed filesystem) by all tasks with output for the named stage |
+| `outputRecords` | number | Sum of the number of records written externally (e.g. to a distributed filesystem) by all tasks with output for the named stage |
+| `shuffleRemoteFetchedBlockCount` | number | Sum of the number of remote blocks fetched in shuffle operations by all tasks for the named stage  |
+| `shuffleLocalFetchedBlockCount` | number | Sum of the number of local (as opposed to read from a remote executor) blocks fetched in shuffle operations by all tasks for the named stage |
+| `shuffleFetchWaitDuration` | number | Total time tasks spent waiting for remote shuffle blocks for the named stage |
+| `shuffleRemoteReadBytes` | number | Sum of the number of remote bytes read in shuffle operations by all task for the named stages |
+| `shuffleRemoteReadToDiskBytes` | number | Sum of the number of remote bytes read to disk in shuffle operations by all tasks for the named stage |
+| `shuffleLocalReadBytes` | number | Sum of the number of bytes read in shuffle operations from local disk (as opposed to read from a remote executor) by all tasks for the named stage |
+| `shuffleReadBytes` | number | This metric is not documented in the Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
+| `shuffleReadRecords` | number | Sum of the number of records read in shuffle operations by all tasks for the named stage |
+| `shuffleCorruptMergedBlockChunkCount` | number | Sum of the number of corrupt merged shuffle block chunks encountered by all tasks (remote or local) for the named stage |
+| `shuffleMergedFetchFallbackCount` | number | Sum of the number of times tasks had to fallback to fetch original shuffle blocks for a merged shuffle block chunk (remote or local) for the named stage |
+| `shuffleRemoteMergedFetchedBlockCount` | number | Sum of the number of remote merged blocks fetched by all tasks for the named stage  |
+| `shuffleLocalMergedFetchedBlockCount` | number | Sum of the number of local merged blocks fetched by all tasks for the named stage |
+| `shuffleRemoteMergedFetchedChunkCount` | number | Sum of the number of remote merged chunks fetched by all tasks for the named stage |
+| `shuffleLocalMergedFetchedChunkCount` | number | Sum of the number of local merged chunks fetched by all tasks for the named stage |
+| `shuffleRemoteMergedReadBytes` | number | Sum of the number of remote merged bytes read by all tasks for the named stage |
+| `shuffleLocalMergedReadBytes` | number | Sum of the number of local merged bytes read by all tasks for the named stage |
+| `shuffleRemoteReqsDuration` | number | Total time tasks took executing remote requests for the named stage |
+| `shuffleRemoteMergedReqsDuration` | number | Total time tasks took executing remote merged requests for the named stage |
+| `shuffleWriteBytes` | number | Sum of the number of bytes written in shuffle operations by all tasks for the named stage |
+| `shuffleWriteDuration` | number | Total time tasks spent blocking on writes to disk or buffer cache for the named stage. The value is expressed in nanoseconds. |
+| `shuffleWriteRecords` | number | Sum of the number of records written in shuffle operations by all tasks for the named stage |
+| `shuffleMergersCount` | number | The number of shuffle merges that occurred during this stage |
+| `stage.peakNettyDirectMemory` | number | **Databricks only**  |
+| `stage.peakJvmDirectMemory` | number | **Databricks only**  |
+| `stage.peakSparkDirectMemoryOverLimit` | number | **Databricks only** |
+| `stage.peakTotalOffHeapMemory` | number | **Databricks only** |
+| `peakJvmHeapMemoryUsedBytes` | number | Peak memory usage of the heap that is used for object allocation by the Java virtual machine while executing tasks for the named stage |
+| `peakJvmOffHeapMemoryUsedBytes` | number | Peak memory usage of non-heap memory by the Java virtual machine while executing tasks for the named stage |
+| `peakOnHeapExecutionMemoryUsedBytes` | number | Peak on heap execution memory usage while executing tasks for the named stage, in bytes |
+| `peakOffHeapExecutionMemoryUsedBytes` | number | Peak off heap execution memory usage while executing tasks for the named stage, in bytes |
+| `peakOnHeapStorageMemoryUsedBytes` | number | Peak on heap storage memory usage while executing tasks for the named stage, in bytes |
+| `peakOffHeapStorageMemoryUsedBytes` | number | Peak off heap storage memory usage while executing tasks for the named stage, in bytes |
+| `peakOnHeapUnifiedMemoryUsedBytes` | number | Peak on heap memory usage (execution and storage) while executing tasks for the named stage, in bytes |
+| `peakOffHeapUnifiedMemoryUsedBytes` | number | Peak off heap memory usage (execution and storage) while executing tasks for the named stage, in bytes |
+| `peakDirectPoolMemoryUsedBytes` | number | Peak JVM memory usage for the direct buffer pool (java.lang.management.BufferPoolMXBean) while executing tasks for the named stage |
+| `peakMappedPoolMemoryUsedBytes` | number | Peak JVM memory usage for the mapped buffer pool (java.lang.management.BufferPoolMXBean) while executing tasks for the named stage |
+| `peakProcessTreeJvmVirtualBytes` | number | Peak virtual memory size while executing tasks for the named stage, in bytes |
+| `peakProcessTreeJvmRSS` | number | Peak Resident Set Size (number of pages the process has in real memory) while executing tasks for the named stage |
+| `peakProcessTreePythonVirtualBytes` | number | Peak virtual memory size for Python while executing tasks for the named stage, in bytes |
+| `peakProcessTreePythonRSS` | number | Peak Resident Set Size for Python while executing tasks for the named stage |
+| `peakProcessTreeOtherVirtualBytes` | number | Peak virtual memory size for other kinds of processes while executing tasks for the named stage, in bytes |
+| `peakProcessTreeOtherRSS` | number | Peak resident Set Size for other kinds of processes while executing tasks for the named stage |
+| `peakMinorGCCount` | number | Total number of minor GCs that occurred while executing tasks for the named stage |
+| `peakMinorGCDuration` | number | Total elapsed time spent doing minor GCs while executing tasks for the named stage. The value is expressed in milliseconds. |
+| `peakMajorGCCount` | number | Total number of major GCs that occurred while executing tasks for the named stage |
+| `peakMajorGCDuration` | number | Total elapsed time spent doing major GCs while executing tasks for the named stage. The value is expressed in milliseconds. |
+| `peakTotalGCDuration` | number | Total elapsed time spent doing GC while executing tasks for the named stage. The value is expressed in milliseconds. |
+| `peakNettyDirectMemory` | number | **Databricks only**  |
+| `peakJvmDirectMemory` | number | **Databricks only**  |
+| `peakSparkDirectMemoryOverLimit` | counter | **Databricks only** |
+| `peakTotalOffHeapMemory` | number | **Databricks only** |
 
-##### Spark application RDD metrics
+**NOTE:** For skipped stages, only a `SparkStage` complete event is recorded.
+No `SparkStage` start event is recorded. Furthermore, `SparkStage` complete
+events for skipped stages _only_ include the following attributes listed above:
 
-The following metrics are included for each Spark RDD in an application. Metrics
-are scoped to a given RDD using the `sparkAppRDDId` and `sparkAppRDDName` [attributes](#spark-application-rdd-attributes).
+* `event`
+* `stageId`
+* `stageName`
+* `jobDescription`
+* `details`
+* `attemptId`
+* `schedulingPool`
+* `resourceProfileId`
+* `status`
+* `taskCount`
+
+##### Spark application task data
+
+The integration records a start event for each task that starts while the
+integration is running and a complete event for each task that completes while
+the integration is running. Both events are reported using the
+`SparkTask` event type. The `event` attribute on the `SparkTask` event can be
+used to differentiate between the start event (the `event` attribute will be set
+to `start`) and the complete event (the `event` attribute will be set to
+`complete`).
+
+Each `SparkTask` start event includes the following attributes.
+
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `event` | string | Set to `start` for a start event and `complete` for a complete event |
+| `stageId` | number | Spark stage ID |
+| `stageName` | string | Spark stage name |
+| `stageStatus` | string | Spark stage [status](#spark-job-stage-and-task-status) |
+| `stageAttemptId` | number | Spark stage attempt ID |
+| `taskId` | string | Spark task ID |
+| `index` | number | The index of this task within its task set |
+| `attemptId` | number | Spark task attempt number |
+| `executorId` | string | Spark executor ID |
+| `locality` | string | [Locality](https://spark.apache.org/docs/3.5.4/tuning.html#data-locality) of the data this task operates on |
+| `speculative` | boolean | `true` if this is a [speculative task execution](https://kb.databricks.com/scala/understanding-speculative-execution), otherwise `false` |
+| `partitionId` | number | The ID of the RDD partition this task is reponsible for computing  |
+| `launchTime` | number | Time the task was launched, in milliseconds since the epoch |
+
+Each `SparkTask` complete event includes all the attributes on the start event
+plus the following additional attributes.
+
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `status` | string | Spark task [status](#spark-job-stage-and-task-status) |
+| `completionTime` | number | Time the task completed, in milliseconds since the epoch |
+| `duration` | number | Duration of the task. The value is expressed in milliseconds. |
+| `schedulerDelay` | number | The time between when the task was created by the scheduler and when the task begins executing on an executor |
+| `gettingResultDuration` | number | The time when the task started remotely getting the result |
+| `executorDeserializeDuration` | number | Elapsed time spent to deserialize this task. The value is expressed in milliseconds. |
+| `executorDeserializeCpuDuration` | number | CPU time taken on the executor to deserialize this task. The value is expressed in nanoseconds. |
+| `executorRunDuration` | number | Elapsed time the executor spent running this task. This includes time fetching shuffle data. The value is expressed in milliseconds. |
+| `executorCpuDuration` | number | CPU time the executor spent running this task. This includes time fetching shuffle data. The value is expressed in nanoseconds. |
+| `resultSizeBytes` | number | The number of bytes this task transmitted back to the driver as the TaskResult |
+| `gcDuration` | number | Elapsed time the JVM spent in garbage collection while executing this task. The value is expressed in milliseconds. |
+| `resultSerializationDuration` | number | Elapsed time spent serializing the task result. The value is expressed in milliseconds. |
+| `memorySpilledBytes` | number | The number of in-memory bytes spilled by this task |
+| `diskSpilledBytes` | number | The number of on-disk bytes spilled by this task |
+| `peakExecutionMemoryUsedBytes` | number | Peak memory used by internal data structures created during shuffles, aggregations and joins. The value of this accumulator should be approximately the sum of the peak sizes across all such data structures created in this task. For SQL jobs, this only tracks all unsafe operators and ExternalSort. |
+| `inputReadBytes` | number | Total number of bytes read from org.apache.spark.rdd.HadoopRDD or from persisted data |
+| `inputReadRecords` | number | Total number of records read from org.apache.spark.rdd.HadoopRDD or from persisted data |
+| `outputWriteBytes` | number | Total number of bytes written externally (e.g. to a distributed filesystem). Defined only in tasks with output. |
+| `outputWriteRecords` | number | Total number of records written externally (e.g. to a distributed filesystem). Defined only in tasks with output. |
+| `shuffleReadRemoteFetchedBlockCount` | number | Number of remote blocks fetched in shuffle operations |
+| `shuffleReadLocalFetchedBlockCount` | number | Number of local (as opposed to read from a remote executor) blocks fetched in shuffle operations |
+| `shuffleReadFetchWaitDuration` | number | Time the task spent waiting for remote shuffle blocks. This only includes the time blocking on shuffle input data. For instance if block B is being fetched while the task is still not finished processing block A, it is not considered to be blocking on block B. The value is expressed in milliseconds. |
+| `shuffleReadRemoteReadBytes` | number | Number of remote bytes read in shuffle operations |
+| `shuffleReadRemoteReadToDiskBytes` | number | Number of remote bytes read to disk in shuffle operations. Large blocks are fetched to disk in shuffle read operations, as opposed to being read into memory, which is the default behavior |
+| `shuffleReadLocalReadBytes` | number | Number of bytes read in shuffle operations from local disk (as opposed to read from a remote executor) |
+| `shuffleReadReadRecords` | number | Number of records read in shuffle operations |
+| `shuffleReadRemoteReqsDuration` | number | Total time taken for remote requests to complete by this task. This doesn't include duration of remote merged requests. |
+| `shufflePushReadCorruptMergedBlockChunkCount` | number | Number of corrupt merged shuffle block chunks encountered by this task (remote or local) |
+| `shufflePushReadMergedFetchFallbackCount` | number | Number of times the task had to fallback to fetch original shuffle blocks for a merged shuffle block chunk (remote or local) |
+| `shufflePushReadRemoteMergedFetchedBlockCount` | number | Number of remote merged blocks fetched  |
+| `shufflePushReadLocalMergedFetchedBlockCount` | number | Number of local merged blocks fetched |
+| `shufflePushReadRemoteMergedFetchedChunkCount` | number | Number of remote merged chunks fetched |
+| `shufflePushReadLocalMergedFetchedChunkCount` | number | Number of local merged chunks fetched |
+| `shufflePushReadRemoteMergedReadBytes` | number | Total number of remote merged bytes read |
+| `shufflePushReadLocalMergedReadBytes` | number | Total number of local merged bytes read |
+| `shufflePushReadRemoteMergedReqsDuration` | number | Total time taken for remote merged requests |
+| `shuffleWriteWriteBytes` | number | Number of bytes written in shuffle operations |
+| `shuffleWriteWriteDuration` | number | Time spent blocking on writes to disk or buffer cache. The value is expressed in nanoseconds. |
+| `shuffleWriteWriteRecords` | number | Number of records written in shuffle operations |
+| `photonOffHeapMinMemorySize` | number | **Databricks only** |
+| `photonOffHeapMaxMemorySize` | number | **Databricks only** |
+| `photonBufferPoolMinMemorySize` | number | **Databricks only** |
+| `photonBufferPoolMaxMemorySize` | number | **Databricks only** |
+| `photonizedTaskTimeNs` | number | **Databricks only** |
+| `snapstartedTaskCount` | number | **Databricks only** |
+
+##### Spark application RDD data
+
+Each time the integration collects Spark RDD metrics, it reports one
+`SparkRDDSample` event for each Spark RDD in each Spark application.
+In addition, it records one `SparkRDDDistributionSample` for each RDD
+distribution for each Spark RDD in each Spark application and one
+`SparkRDDPartitionSample` for each RDD partition for each Spark RDD in each
+Spark application.
 
 **NOTE:** The metrics in this section are not documented in the
 Apache Spark monitoring [ReST API documentation](https://spark.apache.org/docs/latest/monitoring.html#rest-api).
-The descriptions provided below were deduced via source code analysis and are
-not determinate.
+The descriptions provided below were deduced primarily via analysis of the
+[Apache Spark source code](https://github.com/apache/spark/tree/master) and
+are not necessarily determinate.
 
-| Metric Name | Metric Type | Description |
-| --- | --- | --- |
-| `app.storage.rdd.partitions` | gauge | The total number of partitions for this RDD |
-| `app.storage.rdd.cachedPartitions` | gauge | The total number of partitions that have been persisted (cached) in memory and/or on disk  |
-| `app.storage.rdd.memory.used` | gauge | The total amount of memory used by this RDD across all partitions |
-| `app.storage.rdd.disk.used` | gauge | The total amount of disk space used by this RDD across all partitions |
-| `app.storage.rdd.distribution.memory.used` | gauge | Unknown |
-| `app.storage.rdd.distribution.memory.remaining` | gauge | Unknown |
-| `app.storage.rdd.distribution.disk.used` | gauge | Unknown |
-| `app.storage.rdd.distribution.memory.usedOnHeap` | gauge | Unknown |
-| `app.storage.rdd.distribution.memory.usedOffHeap` | gauge | Unknown |
-| `app.storage.rdd.distribution.memory.remainingOnHeap` | gauge | Unknown |
-| `app.storage.rdd.distribution.memory.remainingOffHeap` | gauge | Unknown |
-| `app.storage.rdd.partition.memory.used` | gauge | The total amount of memory used by this RDD partition |
-| `app.storage.rdd.partition.disk.used` | gauge | The total amount of disk space used by this RDD partition |
-
-##### Spark application RDD attributes
-
-The following attributes are included on all [Spark application RDD metrics](#spark-application-rdd-metrics).
+Each `SparkRDDSample` event includes the following attributes.
 
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
-| `sparkAppRDDId` | number | Spark RDD ID |
-| `sparkAppRDDName` | string | Spark RDD name |
-| `sparkAppRddDistributionIndex` | number | Numerical index of the RDD distribution in the list of distributions returned for this RDD by the Spark application RDD endpoint of the [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api). Only on `app.storage.rdd.distribution.*` metrics. |
-| `sparkAppRddPartitionBlockName` | string | Name of the block where the RDD partition is stored. Only on `app.storage.rdd.partition.*` metrics. |
+| `rddId` | number | Spark RDD ID |
+| `rddName` | string | Spark RDD name |
+| `storageLevel` | string | A string that describes the storage level options used to persist this RDD |
+| `partitionCount` | number | The total number of partitions for this RDD |
+| `cachedPartitionCount` | number | The total number of partitions that have been persisted (cached) in memory and/or on disk  |
+| `memoryUsedBytes` | number | The total amount of memory used by this RDD across all partitions |
+| `diskUsedBytes` | number | The total amount of disk space used by this RDD across all partitions |
+
+Each `SparkRDDDistributionSample` event includes the following attributes.
+
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `rddId` | number | Spark RDD ID |
+| `rddName` | string | Spark RDD name |
+| `distributionIndex` | number | Numerical index of the RDD distribution in the list of distributions returned for this RDD by the Spark application RDD endpoint of the [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api) |
+| `memoryUsedBytes` | number | Unknown |
+| `memoryFreeBytes` | number | Unknown |
+| `diskUsedBytes` | number | Unknown |
+| `onHeapMemoryUsedBytes` | number | Unknown |
+| `onHeapMemoryFreeBytes` | number | Unknown |
+| `offHeapMemoryUsedBytes` | number | Unknown |
+| `offHeapMemoryFreeBytes` | number | Unknown |
+
+Each `SparkRDDPartitionSample` event includes the following attributes.
+
+| Attribute Name | Data Type | Description |
+| --- | --- | --- |
+| `rddId` | number | Spark RDD ID |
+| `rddName` | string | Spark RDD name |
+| `blockName` | string | Name of the block where the RDD partition is stored |
+| `storageLevel` | string | A string that describes the effective storage level options used to persist this RDD |
+| `memoryUsedBytes` | number | The total amount of memory used by this RDD partition |
+| `diskUsedBytes` | number | The total amount of disk space used by this RDD partition |
+| `executorIds` | string | Comma-separated list of executor IDs |
 
 ##### Spark job, stage, and task status
 
-Most of the Spark metrics recorded include at least one of the following
-attributes that indicate the [status](#spark-job-stage-and-task-status) of the
-job, stage, or task for the metric.
+`SparkJob`, `SparkStage`, and `SparkTask` complete events always include a
+`status` attribute that indicates the completion status of the Spark job, stage,
+or task recorded in the event. The possible values for the `status` field for
+each event type are listed below.
 
-* `sparkAppJobStatus`
+* `SparkJob`
 
-  Spark job [status](#spark-job-stage-and-task-status). One of the following.
-
-  * `running` - job is executing
-  * `lost` - job status is unknown
   * `succeeded` - job completed successfully
   * `failed` - job failed
 
-* `sparkAppStageStatus`
+* `SparkStage`
 
-  Spark stage [status](#spark-job-stage-and-task-status). One of the following.
-
-  * `active` - stage is executing
   * `complete` - stage completed successfully
   * `skipped` - stage was skipped because it did not need to be recomputed
   * `failed` - stage failed
-  * `pending`- stage is waiting to be executed
 
-* `sparkAppTaskStatus`
+* `SparkTask`
 
-  Spark task [status](#spark-job-stage-and-task-status). One of the following.
-
-  * `active` - task is executing
   * `complete` - task completed successfully
   * `skipped` - task was skipped because the stage was skipped
   * `failed` - task failed
   * `killed` - task was explicitly killed
 
-##### Spark job, stage, and task counts
-
-On each run, for each Spark application, the integration records the following
-counter metrics.
-
-* `app.jobs`
-
-  The number of Spark jobs for an application by job [status](#spark-job-stage-and-task-status).
-  This metric will always include the `sparkAppJobStatus` attribute, which
-  indicates which job [status](#spark-job-stage-and-task-status) the metric
-  applies to (for instance, if the metric value is 5 and the `sparkAppJobStatus`
-  attribute is `running`, it means that there are 5 running jobs).
-
-  Use the `sparkAppId` or `sparkAppName` to target a specific application or to
-  group the values by application.
-
-* `app.stages`
-
-  The number of Spark stages for an application by stage [status](#spark-job-stage-and-task-status).
-  This metric will always include the `sparkAppStageStatus` attribute, which
-  indicates which stage [status](#spark-job-stage-and-task-status) the metric
-  applies to (for instance, if the metric value is 5 and the
-  `sparkAppStageStatus` attribute is `complete`, it means that there are 5
-  completed stages).
-
-  Use the `sparkAppId` or `sparkAppName` attributes to target a specific
-  application or to group the values by application.
-
-* `app.job.stages`
-
-  The number of Spark stages for a Spark job by stage [status](#spark-job-stage-and-task-status).
-  This metric will always include the `sparkAppStageStatus` and
-  `sparkAppJobStatus` attributes, which indicate which stage [status](#spark-job-stage-and-task-status)
-  and job [status](#spark-job-stage-and-task-status) the metric applies to,
-  respectively (for instance, if the metric value is 2 and
-  the `sparkAppStageStatus` attribute is `complete` and the `sparkAppJobStatus`
-  is `running`, it means that the job is running and 2 stages have completed).
-
-  Use the `sparkAppId` or `sparkAppName` attributes to target a specific
-  application or to group the values by application and the `sparkAppJobId`
-  attribute to target a specific job or to group the values by job.
-
-* `app.job.tasks`
-
-  The number of Spark tasks for a Spark job by task [status](#spark-job-stage-and-task-status).
-  This metric will always include the `sparkAppTaskStatus` and
-  `sparkAppJobStatus` attributes, which indicate which task [status](#spark-job-stage-and-task-status)
-  and job [status](#spark-job-stage-and-task-status) the metric applies to,
-  respectively (for instance, if the metric value is 4 and
-  the `sparkAppTaskStatus` attribute is `complete` and the `sparkAppJobStatus`
-  is `running`, it means that the job is running and 4 tasks have completed).
-
-  Use the `sparkAppId` or `sparkAppName` attributes to target a specific
-  application or to group the values by application and the `sparkAppJobId`
-  attribute to target a specific job or to group the values by job.
-
-* `app.stage.tasks`
-
-  The number of Spark tasks for a Spark stage by task [status](#spark-job-stage-and-task-status).
-  This metric will always include the `sparkAppTaskStatus` and
-  `sparkAppStageStatus` attributes, which indicate which task [status](#spark-job-stage-and-task-status)
-  and stage [status](#spark-job-stage-and-task-status) the metric applies to,
-  respectively (for instance, if the metric value is 4 and the
-  `sparkAppTaskStatus` attribute is `complete` and the `sparkAppStageStatus`
-  is `active`, it means that the stage is running and 4 tasks have completed).
-
-  Use the `sparkAppId` or `sparkAppName` attributes to target a specific
-  application or to group the values by application and the `sparkAppStageId` or
-  `sparkAppStageName` attribute to target a specific stage or to group the
-  values by stage.
-
-In general, only the [`latest()`](https://docs.newrelic.com/docs/nrql/nrql-syntax-clauses-functions/#latest)
-aggregator function should be used when visualizing or alerting using these
-counters.
+  In addition, the `SparkTask` complete event includes a `stageStatus` attribute
+  that indicates the status of the task's "parent" stage at the time that the
+  task completed. In addition to the status values listed above for the
+  `SparkStage` event, the `stageStatus` attribute can also have the value
+  `active`, indicating that the stage was still running when the stage and task
+  data were retrieved from the Spark [ReST API](https://spark.apache.org/docs/latest/monitoring.html#rest-api).
 
 ##### Mapping Spark metrics to Databricks Jobs and Pipelines
 
@@ -1743,156 +1630,268 @@ metrics. Only the workspace related attributes will be available.
 All examples below assume the spark [metricPrefix](#metricPrefix)
 is `spark.`.
 
-**Current number of jobs by application name and job status**
+**Number of completed jobs by application name and job status**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.jobs)
-FACET sparkAppName, sparkAppJobStatus
+FROM SparkJob
+SELECT count(*)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, status
 ```
 
-**Current number of stages by application name and stage status**
+**Number of jobs that failed by application name**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.stages)
-FACET sparkAppName, sparkAppStageStatus
+FROM SparkJob
+SELECT count(*)
+WHERE event = 'complete' AND status = 'failed'
+FACET sparkAppName AS Application
 ```
 
-**Current number of stages by application name, job ID, and stage status**
+**Number of running jobs by application name**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.job.stages)
-FACET sparkAppName, sparkAppJobId, sparkAppStageStatus
-```
-
-**Current number of tasks by application name, stage ID, and task status**
-
-```sql
-FROM Metric
-SELECT latest(spark.app.stage.tasks)
-FACET sparkAppName, sparkAppStageId, sparkAppTaskStatus
+SELECT count(*)
+FROM (
+ FROM SparkJob
+ SELECT
+  uniqueCount(event) as 'total',
+  latest(event) as 'state'
+ FACET sparkAppName, jobId, description, submissionTime
+ ORDER BY max(timestamp)
+ LIMIT MAX)
+WHERE total = 1 AND state = 'start'
+FACET sparkAppName AS Application, jobId AS 'Job ID', description, toDatetime(submissionTime)
 LIMIT MAX
 ```
 
-**Current number of running jobs by application name**
+**NOTE:** In this query, the nested query returns the unique number of values
+for the `event` attribute on the `SparkJob` event and the value of the `event`
+attribute of the first `SparkJob` row returned when grouping jobs by Spark
+application name, job ID, description, and submission time (which uniquely
+identifies a job) and ordering by latest timestamp. The value of the outer query
+counts the number of results returned where the unique number of values for the
+`event` attribute is 1 and the value of the `event` attribute of the first
+`SparkJob` row is `start`. This effectively identifies running Spark jobs by
+uniquely identifying jobs for which a `start` event has been posted but a
+`complete` event has not been posted.
+
+**Number of job stages completed, skipped, and failed by application name and job ID**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.jobs)
-WHERE sparkAppJobStatus = 'running'
-FACET sparkAppName
+FROM SparkJob
+SELECT latest(completedStageCount), latest(skippedStageCount), latest(failedStageCount)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobId AS 'Job ID', toDatetime(submissionTime)
 ```
 
-**Number of completed tasks by application name and job ID**
+**NOTE:**
+* Note the use of the `*Count` fields on the `SparkJob` event rather than
+  using `count(*)` on the SparkStage. This is required in order to group the
+  results by job ID.
+* Spark job IDs are not always unique. For example, if an executor is
+  removed and then a new executor is later added, the job IDs restart from 0.
+  Therefore in order to ensure we are looking at unique jobs in the above query,
+  we need to also group by the the submission time.
+
+**Number of completed stages by application name and stage status**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.job.tasks)
-WHERE sparkAppTaskStatus = 'complete'
-FACET sparkAppName, sparkAppJobId
-LIMIT MAX
+FROM SparkStage
+SELECT count(*)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, status
+```
+
+**Number of stages that completed successfully by application name**
+
+```sql
+FROM SparkStage
+SELECT count(*)
+WHERE event = 'complete' AND status = 'complete'
+FACET sparkAppName AS Application
+```
+
+**Number of stages that were skipped by application name**
+
+```sql
+FROM SparkStage
+SELECT count(*)
+WHERE event = 'complete' AND status = 'skipped'
+FACET sparkAppName AS Application
+```
+
+**Number of stage tasks completed, killed, and failed by application name, stage ID, attempt ID, and submission time**
+
+```sql
+FROM SparkStage
+SELECT latest(completedTaskCount), latest(killedTaskCount), latest(failedTaskCount)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, stageId AS 'Stage ID', attemptId AS 'Attempt ID', toDateTime(submissionTime)
+```
+
+**NOTE:**
+* Note the use of the `*Count` fields on the `SparkStage` event rather than
+  using `count(*)` on the `SparkTask`. This is required in order to group the
+  results by submission time.
+* Spark stage IDs are not always unique. For example, if an executor is
+  removed and then a new executor is later added, the stage IDs restart from 0.
+  Therefore in order to ensure we are looking at unique stage attempts in the
+  above query, we need to also group by the attempt ID and the submission time.
+
+**Number of completed tasks by application name, stage ID, and task status**
+
+```sql
+FROM SparkTask
+SELECT count(*)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, stageId AS 'Stage ID', status
+```
+
+**Number of tasks that were killed by application name and stage ID**
+
+```sql
+FROM SparkTask
+SELECT count(*)
+WHERE event = 'complete' AND status = 'killed'
+FACET sparkAppName AS Application, stageId AS 'Stage ID'
 ```
 
 **Number of failed tasks by application name and job ID**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.job.tasks)
-WHERE sparkAppTaskStatus = 'failed'
-FACET sparkAppName, sparkAppJobId
-LIMIT MAX
+FROM SparkJob
+SELECT latest(failedTaskCount)
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobId AS 'Job ID', attemptId AS 'Attempt ID', toDatetime(submissionTime)
 ```
 
-**Job duration by application name, job ID, and job status**
+* Note the use of the `*Count` fields on the `SparkJob` event rather than
+  using `count(*)` on the `SparkTask`. This is required in order to group the
+  results by job ID.
+* Spark job IDs are not always unique. For example, if an executor is
+  removed and then a new executor is later added, the job IDs restart from 0.
+  Therefore in order to ensure we are looking at unique jobs in the above query,
+  we need to also group by the attempt ID and the submission time.
+
+**Average job duration by application name over time**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.job.duration) / 1000 AS Duration
-FACET sparkAppName, sparkAppJobId, sparkAppJobStatus
-LIMIT MAX
+FROM SparkJob
+SELECT average(duration / 1000) AS Duration
+WHERE event = 'complete'
+FACET sparkAppName AS Application
+TIMESERIES
 ```
 
-**Stage duration by application name, stage ID, and stage name**
+**Job details (job ID, job description, submission time, completion time, status, duration) for each job ordered by slowest job**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.stage.duration) / 1000 AS Duration
-FACET sparkAppName, sparkAppStageId, sparkAppStageName
+FROM SparkJob
+SELECT sparkAppName AS Application, jobId AS 'Job ID', description, submissionTime, completionTime, status, duration
+WHERE event = 'complete'
 LIMIT MAX
+ORDER BY duration DESC
 ```
 
-**Task duration by application name, stage ID, stage name, and task ID**
+**Average stage duration by application name and job description**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.stage.task.executorRunTime) / 1000 AS Duration
-FACET sparkAppName, sparkAppStageId, sparkAppStageName, sparkAppTaskId
-LIMIT MAX
+FROM SparkStage
+SELECT average(duration / 1000) AS Duration
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobDescription
 ```
 
-**Total elapsed stage executor run time (in seconds) by application name, stage ID, and stage name**
+**Stage details (job description, stage ID, attempt ID, submission time, first task launched time, completion time, status, duration) for each stage ordered by slowest stage**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.stage.executor.runTime) / 1000 AS Duration
-FACET sparkAppName, sparkAppStageId, sparkAppStageName
+FROM SparkStage
+SELECT sparkAppName AS Application, jobDescription, stageId AS 'Stage ID', attemptId AS 'Attempt ID', submissionTime, firstTaskLaunchedTime, completionTime, status, duration
+WHERE event = 'complete'
 LIMIT MAX
+ORDER BY duration DESC
 ```
 
-**Total elapsed stage JVM GC time (in seconds) by application name, stage ID, and stage name**
+**Average task duration by application name and job description**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.stage.jvmGcTime) / 1000 AS Duration
-FACET sparkAppName, sparkAppStageId, sparkAppStageName
+FROM SparkTask
+SELECT average(duration / 1000) AS Duration
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobDescription
+```
+
+**Task details (job description, stage ID, stage attempt ID, task ID, task attempt ID, launch time, completion time, status, duration) for each task ordered by slowest task**
+
+```sql
+FROM SparkTask
+SELECT sparkAppName AS Application, jobDescription, stageId AS 'Stage ID', stageAttemptId AS 'Stage Attempt ID', taskId AS 'Task ID', attemptId AS 'Attempt ID', launchTime, completionTime, status, duration
+WHERE event = 'complete'
 LIMIT MAX
+ORDER BY duration DESC
+```
+
+**Average elapsed stage executor run time (in seconds) by application name and job description**
+
+```sql
+FROM SparkStage
+SELECT average(executorRunDuration) / 1000 AS Duration
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobDescription
+```
+
+**Average elapsed stage JVM GC time (in seconds) by application name and job description**
+
+```sql
+FROM SparkStage
+SELECT average(gcDuration) / 1000 AS Duration
+WHERE event = 'complete'
+FACET sparkAppName AS Application, jobDescription
 ```
 
 **Average memory used by application name and executor ID over time**
 
 ```sql
-FROM Metric
-SELECT average(spark.app.executor.memoryUsed)
-WHERE spark.app.executor.memoryUsed IS NOT NULL
-FACET sparkAppName, sparkAppExecutorId
+FROM SparkExecutorSample
+SELECT average(memoryUsedBytes)
+FACET sparkAppName, executorId
 TIMESERIES
 ```
 
-**Number of executors (active and dead) by application name**
+**Number of active executors by application name**
 
 ```sql
-FROM Metric
-SELECT uniqueCount(sparkAppExecutorId)
-WHERE metricName = 'spark.app.executor.maxMemory'
-FACET sparkAppName
+FROM SparkExecutorSample
+SELECT uniqueCount(executorId)
+WHERE isActive = true
+FACET sparkAppName AS Application
 ```
 
-**Total number of partitions by application name and RDD name**
+**Number of unique partitions by application name**
 
 ```sql
-FROM Metric
-SELECT latest(spark.app.storage.rdd.partitions)
-FACET sparkAppName, sparkAppRDDName
+FROM SparkRDDPartitionSample
+SELECT uniqueCount(concat(rddId, rddName, blockName))
+FACET sparkAppName AS Application
 ```
 
-**Average RDD memory used by application name and RDD name**
+**Average RDD memory used by application name and RDD over time**
 
 ```sql
-FROM Metric
-SELECT average(spark.app.storage.rdd.memory.used)
-WHERE spark.app.storage.rdd.memory.used IS NOT NULL
-FACET sparkAppName, sparkAppRDDId
+FROM SparkRDDSample
+SELECT average(memoryUsedBytes)
+FACET sparkAppName AS Application, rddId AS 'RDD ID', rddName
+TIMESERIES
 ```
 
-**Average RDD partition memory used by application name, RDD ID, and RDD block name**
+**Average RDD partition memory used by application name, RDD, and block name over time**
 
 ```sql
-FROM Metric
-SELECT average(spark.app.storage.rdd.partition.memory.used)
-WHERE spark.app.storage.rdd.partition.memory.used IS NOT NULL
-FACET sparkAppName, sparkAppRDDId, sparkAppRddPartitionBlockName
+FROM SparkRDDPartitionSample
+SELECT average(memoryUsedBytes)
+FACET sparkAppName AS Application, rddId AS 'RDD ID', rddName, blockName
+TIMESERIES
 ```
 
 #### Example Apache Spark Dashboard

@@ -355,12 +355,7 @@ databricks:
       maxResults: 100
 spark:
   webUiUrl: http://{UI_HOST}:{UI_PORT}
-  metricPrefix: spark.
   clusterManager: databricks
-  databricks:
-    includeJobRunTaskRunId: false
-    includePipelineUpdateId: false
-    includePipelineFlowId: false
 tags:
   databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   databricksClusterId: $DB_CLUSTER_ID

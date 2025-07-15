@@ -133,7 +133,7 @@ func TestParseDatabricksSparkJobGroup(t *testing.T) {
 	}
 }
 
-func TestNewDatabricksMetricDecorator(t *testing.T) {
+func TestNewDatabricksSparkEventDecorator(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
@@ -141,16 +141,13 @@ func TestNewDatabricksMetricDecorator(t *testing.T) {
 	mock, teardown := setupMockWorkspace()
 	defer teardown()
 
-	// Execute NewDatabricksMetricDecorator with default configuration
-	decorator, err := NewDatabricksMetricDecorator(context.Background())
+	// Execute NewDatabricksEventDecorator with default configuration
+	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Verify results
 	assert.NotNil(t, decorator)
 	assert.NoError(t, err)
 	assert.Equal(t, decorator.w, mock)
-	assert.Equal(t, false, decorator.includeJobRunTaskRunId)
-	assert.Equal(t, false, decorator.includePipelineFlowId)
-	assert.Equal(t, false, decorator.includePipelineUpdateId)
 	assert.NotNil(t, decorator.stageIdsToJobs)
 	assert.Empty(t, decorator.stageIdsToJobs)
 	assert.NotNil(t, decorator.workspaceInfo)
@@ -159,69 +156,7 @@ func TestNewDatabricksMetricDecorator(t *testing.T) {
 	assert.Equal(t, "foo.fakedomain.local", decorator.workspaceInfo.InstanceName)
 }
 
-func TestNewDatabricksMetricDecorator_IdFlags(t *testing.T) {
-	// Reset viper config to ensure clean test state
-	viper.Reset()
-
-	// Set ID config flags
-	viper.Set("spark.databricks.includeJobRunTaskRunId", true)
-	viper.Set("spark.databricks.includePipelineUpdateId", true)
-	viper.Set("spark.databricks.includePipelineFlowId", true)
-
-	// Setup mock workspace
-	mock, teardown := setupMockWorkspace()
-	defer teardown()
-
-	// Execute the function under test
-	decorator, err := NewDatabricksMetricDecorator(context.Background())
-
-	// Verify results
-	assert.NotNil(t, decorator)
-	assert.NoError(t, err)
-	assert.Equal(t, decorator.w, mock)
-	assert.Equal(t, true, decorator.includeJobRunTaskRunId)
-	assert.Equal(t, true, decorator.includePipelineUpdateId)
-	assert.Equal(t, true, decorator.includePipelineFlowId)
-	assert.NotNil(t, decorator.stageIdsToJobs)
-	assert.Empty(t, decorator.stageIdsToJobs)
-	assert.NotNil(t, decorator.workspaceInfo)
-	assert.Equal(t, int64(12345), decorator.workspaceInfo.Id)
-	assert.Equal(t, "https://foo.fakedomain.local", decorator.workspaceInfo.Url)
-	assert.Equal(t, "foo.fakedomain.local", decorator.workspaceInfo.InstanceName)
-}
-
-func TestNewDatabricksMetricDecorator_IdFlags_False(t *testing.T) {
-	// Reset viper config to ensure clean test state
-	viper.Reset()
-
-	// Set ID config flags explicitly to false
-	viper.Set("spark.databricks.includeJobRunTaskRunId", false)
-	viper.Set("spark.databricks.includePipelineUpdateId", false)
-	viper.Set("spark.databricks.includePipelineFlowId", false)
-
-	// Setup mock workspace
-	mock, teardown := setupMockWorkspace()
-	defer teardown()
-
-	// Execute the function under test
-	decorator, err := NewDatabricksMetricDecorator(context.Background())
-
-	// Verify results
-	assert.NotNil(t, decorator)
-	assert.NoError(t, err)
-	assert.Equal(t, decorator.w, mock)
-	assert.Equal(t, false, decorator.includeJobRunTaskRunId)
-	assert.Equal(t, false, decorator.includePipelineUpdateId)
-	assert.Equal(t, false, decorator.includePipelineFlowId)
-	assert.NotNil(t, decorator.stageIdsToJobs)
-	assert.Empty(t, decorator.stageIdsToJobs)
-	assert.NotNil(t, decorator.workspaceInfo)
-	assert.Equal(t, int64(12345), decorator.workspaceInfo.Id)
-	assert.Equal(t, "https://foo.fakedomain.local", decorator.workspaceInfo.Url)
-	assert.Equal(t, "foo.fakedomain.local", decorator.workspaceInfo.InstanceName)
-}
-
-func TestNewDatabricksMetricDecorator_NewDatabricksWorkspaceError(t *testing.T) {
+func TestNewDatabricksSparkEventDecorator_NewDatabricksWorkspaceError(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
@@ -244,7 +179,7 @@ func TestNewDatabricksMetricDecorator_NewDatabricksWorkspaceError(t *testing.T) 
 	}
 
 	// Execute the function under test
-	decorator, err := NewDatabricksMetricDecorator(context.Background())
+	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Verify results
 	assert.Error(t, err)
@@ -252,7 +187,7 @@ func TestNewDatabricksMetricDecorator_NewDatabricksWorkspaceError(t *testing.T) 
 	assert.Equal(t, expectedError, err.Error())
 }
 
-func TestNewDatabricksMetricDecorator_GetWorkspaceInfoError(t *testing.T) {
+func TestNewDatabricksSparkEventDecorator_GetWorkspaceInfoError(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
@@ -280,7 +215,7 @@ func TestNewDatabricksMetricDecorator_GetWorkspaceInfoError(t *testing.T) {
 	}
 
 	// Execute the function under test
-	decorator, err := NewDatabricksMetricDecorator(context.Background())
+	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Verify results
 	assert.Error(t, err)
@@ -300,7 +235,7 @@ func TestDecorate(t *testing.T) {
 	attrs := make(map[string]interface{})
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test with no job info
 	decorator.decorate(nil, attrs)
@@ -344,55 +279,7 @@ func TestDecorate_Job(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
-
-	// Execute the function under test with job info
-	decorator.decorate(sparkJobInfo, attrs)
-
-	// Verify results
-	assert.Contains(t, attrs, "databricksWorkspaceId")
-	assert.Equal(t, int64(12345), attrs["databricksWorkspaceId"])
-	assert.Contains(t, attrs, "databricksWorkspaceName")
-	assert.Equal(t, "foo.fakedomain.local", attrs["databricksWorkspaceName"])
-	assert.Contains(t, attrs, "databricksWorkspaceUrl")
-	assert.Equal(
-		t,
-		"https://foo.fakedomain.local",
-		attrs["databricksWorkspaceUrl"],
-	)
-	assert.Contains(t, attrs, "databricksJobId")
-	assert.Equal(t, int64(12345), attrs["databricksJobId"])
-	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
-	assert.NotContains(t, attrs, "databricksPipelineId")
-	assert.NotContains(t, attrs, "databricksPipelineUpdateId")
-	assert.NotContains(t, attrs, "databricksPipelineFlowId")
-}
-
-func TestDecorate_Job_IncludeTaskRunId(t *testing.T) {
-	// Reset viper config to ensure clean test state
-	viper.Reset()
-
-	// Set includeJobRunTaskRunId config flag to true
-	viper.Set("spark.databricks.includeJobRunTaskRunId", "true")
-
-	// Setup mock workspace
-	_, teardown := setupMockWorkspace()
-	defer teardown()
-
-	// Setup the attributes map
-	attrs := make(map[string]interface{})
-
-	// Setup a mock job group info with job information
-	sparkJobInfo := &databricksSparkJobGroupInfo{
-		jobId:      12345,
-		taskRunId:  67890,
-		pipelineId: "",
-		updateId:   "",
-		flowId:     "",
-	}
-
-	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test with job info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -438,7 +325,7 @@ func TestDecorate_Pipeline(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test with pipeline info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -462,7 +349,7 @@ func TestDecorate_Pipeline(t *testing.T) {
 	assert.NotContains(t, attrs, "databricksPipelineFlowId")
 }
 
-func TestDecorate_PipelineUpdate_NoIncludeUpdateId(t *testing.T) {
+func TestDecorate_PipelineUpdate(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
@@ -483,56 +370,7 @@ func TestDecorate_PipelineUpdate_NoIncludeUpdateId(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
-
-	// Execute the function under test with pipeline update info
-	decorator.decorate(sparkJobInfo, attrs)
-
-	// Verify results
-	assert.Contains(t, attrs, "databricksWorkspaceId")
-	assert.Equal(t, int64(12345), attrs["databricksWorkspaceId"])
-	assert.Contains(t, attrs, "databricksWorkspaceName")
-	assert.Equal(t, "foo.fakedomain.local", attrs["databricksWorkspaceName"])
-	assert.Contains(t, attrs, "databricksWorkspaceUrl")
-	assert.Equal(
-		t,
-		"https://foo.fakedomain.local",
-		attrs["databricksWorkspaceUrl"],
-	)
-	assert.NotContains(t, attrs, "databricksJobId")
-	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
-	assert.Contains(t, attrs, "databricksPipelineId")
-	assert.Equal(t, "12345", attrs["databricksPipelineId"])
-	assert.NotContains(t, attrs, "databricksPipelineUpdateId")
-	assert.NotContains(t, attrs, "databricksPipelineFlowId")
-}
-
-func TestDecorate_Pipeline_IncludeUpdateId(t *testing.T) {
-	// Reset viper config to ensure clean test state
-	viper.Reset()
-
-	// Set includePipelineUpdateId and includePipelineFlowId config flag to true
-	viper.Set("spark.databricks.includePipelineUpdateId", "true")
-	viper.Set("spark.databricks.includePipelineFlowId", "true")
-
-	// Setup mock workspace
-	_, teardown := setupMockWorkspace()
-	defer teardown()
-
-	// Setup the attributes map
-	attrs := make(map[string]interface{})
-
-	// Setup a mock job group info with pipeline update info
-	sparkJobInfo := &databricksSparkJobGroupInfo{
-		jobId:      -1,
-		taskRunId:  -1,
-		pipelineId: "12345",
-		updateId:   "54321",
-		flowId:     "67890",
-	}
-
-	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test with pipeline update info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -573,7 +411,7 @@ func TestDecorateExecutor(t *testing.T) {
 	sparkExecutor := &SparkExecutor{}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test
 	decorator.DecorateExecutor(sparkExecutor, attrs)
@@ -654,7 +492,7 @@ func TestDecorateJob(t *testing.T) {
 			}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksMetricDecorator(context.Background())
+			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 			// Execute the function under test
 			decorator.DecorateJob(sparkJob, attrs)
@@ -679,7 +517,12 @@ func TestDecorateJob(t *testing.T) {
 				if !tt.expectPipelineId {
 					assert.Contains(t, attrs, "databricksJobId")
 					assert.Equal(t, int64(12345), attrs["databricksJobId"])
-					assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Contains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Equal(
+						t,
+						int64(67890),
+						attrs["databricksJobRunTaskRunId"],
+					)
 					assert.NotContains(t, attrs, "databricksPipelineId")
 					assert.NotContains(t, attrs, "databricksPipelineUpdateId")
 					assert.NotContains(t, attrs, "databricksPipelineFlowId")
@@ -804,7 +647,7 @@ func TestDecorateStage(t *testing.T) {
 			}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksMetricDecorator(context.Background())
+			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 			// Setup the stage map
 			tt.setupStageMap(decorator.stageIdsToJobs)
@@ -832,7 +675,12 @@ func TestDecorateStage(t *testing.T) {
 				if !tt.expectPipelineId {
 					assert.Contains(t, attrs, "databricksJobId")
 					assert.Equal(t, int64(12345), attrs["databricksJobId"])
-					assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Contains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Equal(
+						t,
+						int64(67890),
+						attrs["databricksJobRunTaskRunId"],
+					)
 					assert.NotContains(t, attrs, "databricksPipelineId")
 					assert.NotContains(t, attrs, "databricksPipelineUpdateId")
 					assert.NotContains(t, attrs, "databricksPipelineFlowId")
@@ -936,7 +784,7 @@ func TestDecorateTask(t *testing.T) {
 			sparkTask := &SparkTask{}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksMetricDecorator(context.Background())
+			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 			// Setup the stage map
 			tt.setupStageMap(decorator.stageIdsToJobs)
@@ -965,7 +813,12 @@ func TestDecorateTask(t *testing.T) {
 				if !tt.expectPipelineId {
 					assert.Contains(t, attrs, "databricksJobId")
 					assert.Equal(t, int64(12345), attrs["databricksJobId"])
-					assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Contains(t, attrs, "databricksJobRunTaskRunId")
+					assert.Equal(
+						t,
+						int64(67890),
+						attrs["databricksJobRunTaskRunId"],
+					)
 					assert.NotContains(t, attrs, "databricksPipelineId")
 					assert.NotContains(t, attrs, "databricksPipelineUpdateId")
 					assert.NotContains(t, attrs, "databricksPipelineFlowId")
@@ -1007,7 +860,7 @@ func TestDecorateRDDs(t *testing.T) {
 	sparkRDD := &SparkRDD{}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test
 	decorator.DecorateRDD(sparkRDD, attrs)
@@ -1029,7 +882,7 @@ func TestDecorateRDDs(t *testing.T) {
 	)
 }
 
-func TestDecorateMetric(t *testing.T) {
+func TestDecorateEvent(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
@@ -1041,10 +894,10 @@ func TestDecorateMetric(t *testing.T) {
 	attrs := make(map[string]interface{})
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksMetricDecorator(context.Background())
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
 
 	// Execute the function under test
-	decorator.DecorateMetric(attrs)
+	decorator.DecorateEvent(attrs)
 
 	// Verify results
 	assert.Contains(t, attrs, "databricksWorkspaceId")
