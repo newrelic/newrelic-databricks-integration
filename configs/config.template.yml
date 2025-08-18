@@ -30,9 +30,6 @@ databricks:
   jobs:
     runs:
       enabled: true
-      metricPrefix: databricks.
-      includeIdentityMetadata: false
-      includeRunId: false
       startOffset: 86400
   pipelines:
     metrics:

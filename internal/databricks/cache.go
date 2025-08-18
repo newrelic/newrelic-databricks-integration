@@ -43,9 +43,10 @@ var (
 	workspaceInfoCache			*memoryCache[*WorkspaceInfo]
 	clusterInfoCache			*memoryCache[map[string]*clusterInfo]
 	warehouseInfoCache			*memoryCache[map[string]*warehouseInfo]
-    // GetWorkspaceInfo is exposed like this for dependency injection purposes
+    // These functions are exposed like this for dependency injection purposes
 	// to enable mocking of the function in tests.
     GetWorkspaceInfo = getWorkspaceInfo
+	GetClusterInfoById = getClusterInfoById
 )
 
 func newMemoryCache[T interface{}](

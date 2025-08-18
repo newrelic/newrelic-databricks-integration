@@ -333,9 +333,6 @@ databricks:
   jobs:
     runs:
       enabled: $NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED
-      metricPrefix: databricks.
-      includeIdentityMetadata: false
-      includeRunId: false
       startOffset: 86400
   pipelines:
     metrics:

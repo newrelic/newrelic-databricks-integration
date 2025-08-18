@@ -130,21 +130,15 @@ func InitPipelines(
 			startOffset = viper.GetInt64("databricks.jobs.runs.startOffset")
 		}
 
-		includeRunId := viper.GetBool(
-			"databricks.jobs.runs.includeRunId",
-		)
-
 		// Create a metrics pipeline
-		mp := pipeline.NewMetricsPipeline("databricks-job-run-pipeline")
+		mp := pipeline.NewEventsPipeline("databricks-job-run-pipeline")
 		mp.AddExporter(newRelicExporter)
 
 		// Create the receiver
 		databricksJobsReceiver := NewDatabricksJobRunReceiver(
 			i,
 			w,
-			viper.GetString("databricks.jobs.runs.metricPrefix"),
 			time.Duration(startOffset) * time.Second,
-			includeRunId,
 			tags,
 		)
 		mp.AddReceiver(databricksJobsReceiver)
