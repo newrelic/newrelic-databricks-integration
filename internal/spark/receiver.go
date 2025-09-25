@@ -3,7 +3,6 @@ package spark
 import (
 	"context"
 	"errors"
-	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -48,22 +47,7 @@ func getClusterManager() (ClusterManagerType, error) {
 	}
 }
 
-type jobCounters struct {
-	running   int64
-	unknown   int64
-	succeeded int64
-	failed    int64
-}
-
-type stageCounters struct {
-	active   int64
-	pending  int64
-	complete int64
-	failed   int64
-	skipped  int64
-}
-
-type SparkMetricDecorator interface {
+type SparkEventDecorator interface {
 	DecorateExecutor(
 		sparkExecutor *SparkExecutor,
 		attrs map[string]interface{},
@@ -76,37 +60,36 @@ type SparkMetricDecorator interface {
 		attrs map[string]interface{},
 	)
 	DecorateRDD(sparkRDD *SparkRDD, attrs map[string]interface{})
-	DecorateMetric(attrs map[string]interface{})
+	DecorateEvent(attrs map[string]interface{})
 }
 
 type SparkMetricsReceiver struct {
 	i               *integration.LabsIntegration
 	client          SparkApiClient
-	metricPrefix    string
 	clusterManager  ClusterManagerType
-	metricDecorator SparkMetricDecorator
+	eventDecorator  SparkEventDecorator
 	tags            map[string]string
+	lastRun         time.Time
 }
 
 func newSparkMetricsReceiver(
 	ctx context.Context,
 	i *integration.LabsIntegration,
 	client SparkApiClient,
-	metricPrefix string,
 	tags map[string]string,
-) (pipeline.MetricsReceiver, error) {
+) (pipeline.EventsReceiver, error) {
 	clusterManager, err := getClusterManager()
 	if err != nil {
 		return nil, err
 	}
 
-	var metricDecorator SparkMetricDecorator
+	var eventDecorator SparkEventDecorator
 
 	switch clusterManager {
 	case ClusterManagerTypeDatabricks:
 		log.Debugf("using Databricks metric decorator")
 
-		metricDecorator, err = NewDatabricksMetricDecorator(ctx)
+		eventDecorator, err = NewDatabricksSparkEventDecorator(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -115,10 +98,10 @@ func newSparkMetricsReceiver(
 	r := &SparkMetricsReceiver{
 		i,
 		client,
-		metricPrefix,
 		clusterManager,
-		metricDecorator,
+		eventDecorator,
 		tags,
+		Now().UTC(),
 	}
 
 	return r, nil
@@ -128,10 +111,18 @@ func (s *SparkMetricsReceiver) GetId() string {
 	return "spark-metrics-receiver"
 }
 
-func (s *SparkMetricsReceiver) PollMetrics(
+func (s *SparkMetricsReceiver) PollEvents(
 	ctx context.Context,
-	writer chan<- model.Metric,
+	writer chan<- model.Event,
 ) error {
+	lastRun := s.lastRun
+
+	// This only works when the integration is run as a standalone application
+	// that stays running since it requires state to be maintained. However,
+	// this is the only supported way to run the integration. If this ever
+	// changes, this approach to saving the last run time needs to be reviewed.
+	s.lastRun = Now().UTC()
+
 	sparkApps, err := s.client.GetApplications(ctx)
 	if err != nil {
 		return err
@@ -149,8 +140,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				ctx,
 				s.client,
 				app,
-				s.metricPrefix,
-				s.metricDecorator,
+				s.eventDecorator,
 				s.tags,
 				writer,
 			)
@@ -158,12 +148,12 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				errs = append(errs, err)
 			}
 
-			err = collectSparkAppJobMetrics(
+			completedJobs, err := collectSparkAppJobMetrics(
 				ctx,
 				s.client,
 				app,
-				s.metricPrefix,
-				s.metricDecorator,
+				s.eventDecorator,
+				lastRun,
 				s.tags,
 				writer,
 			)
@@ -175,8 +165,9 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				ctx,
 				s.client,
 				app,
-				s.metricPrefix,
-				s.metricDecorator,
+				completedJobs,
+				s.eventDecorator,
+				lastRun,
 				s.tags,
 				writer,
 			)
@@ -188,8 +179,7 @@ func (s *SparkMetricsReceiver) PollMetrics(
 				ctx,
 				s.client,
 				app,
-				s.metricPrefix,
-				s.metricDecorator,
+				s.eventDecorator,
 				s.tags,
 				writer,
 			)
@@ -208,10 +198,9 @@ func collectSparkAppExecutorMetrics(
 	ctx context.Context,
 	client SparkApiClient,
 	sparkApp *SparkApplication,
-	metricPrefix string,
-	metricDecorator SparkMetricDecorator,
+	eventDecorator SparkEventDecorator,
 	tags map[string]string,
-	writer chan<- model.Metric,
+	writer chan<- model.Event,
 ) error {
 	executors, err := client.GetApplicationExecutors(ctx, sparkApp)
 	if err != nil {
@@ -226,1198 +215,835 @@ func collectSparkAppExecutorMetrics(
 			tags,
 		)
 
-		attrs["sparkAppExecutorId"] = executor.Id
+		attrs["executorId"] = executor.Id
+		attrs["isActive"] = executor.IsActive
+		attrs["isExcluded"] = executor.IsExcluded
+		attrs["isBlacklisted"] = executor.IsBlacklisted
 
-		if metricDecorator != nil {
-			metricDecorator.DecorateExecutor(&executor, attrs)
+		addTime, err := time.Parse(RFC3339Milli, executor.AddTime)
+		if err != nil {
+			log.Warnf(
+				"ignoring invalid add time for executor %s: %s",
+				executor.Id,
+				executor.AddTime,
+			)
+		} else {
+			attrs["addTime"] = addTime.UnixMilli()
 		}
 
-		writeGauge(
-			metricPrefix,
-			"app.executor.rddBlocks",
-			executor.RddBlocks,
-			attrs,
-			writer,
-		)
+		if eventDecorator != nil {
+			eventDecorator.DecorateExecutor(&executor, attrs)
+		}
 
-		writeGauge(
-			metricPrefix,
-			"app.executor.memoryUsed",
-			executor.MemoryUsed,
-			attrs,
-			writer,
-		)
+		attrs["rddBlockCount"] = executor.RddBlocks
+		attrs["memoryUsedBytes"] = executor.MemoryUsed
+		attrs["diskUsedBytes"] = executor.DiskUsed
+		attrs["coreCount"] = executor.TotalCores
+		attrs["maxTasks"] = executor.MaxTasks
+		attrs["activeTaskCount"] = executor.ActiveTasks
+		attrs["failedTaskCount"] = executor.FailedTasks
+		attrs["completedTaskCount"] = executor.CompletedTasks
+		attrs["taskCount"] = executor.TotalTasks
+		attrs["taskDuration"] = executor.TotalDuration
+		attrs["gcDuration"] = executor.TotalGCTime
+		attrs["inputBytes"] = executor.TotalInputBytes
+		attrs["shuffleReadBytes"] = executor.TotalShuffleRead
+		attrs["shuffleWriteBytes"] = executor.TotalShuffleWrite
+		attrs["memoryTotalBytes"] = executor.MaxMemory
 
-		writeGauge(
-			metricPrefix,
-			"app.executor.diskUsed",
-			executor.DiskUsed,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalCores",
-			executor.TotalCores,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.maxTasks",
-			executor.MaxTasks,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.activeTasks",
-			executor.ActiveTasks,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.failedTasks",
-			executor.FailedTasks,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.completedTasks",
-			executor.CompletedTasks,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalTasks",
-			executor.TotalTasks,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalDuration",
-			executor.TotalDuration,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalGCTime",
-			executor.TotalGCTime,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalInputBytes",
-			executor.TotalInputBytes,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalShuffleRead",
-			executor.TotalShuffleRead,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.totalShuffleWrite",
-			executor.TotalShuffleWrite,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.executor.maxMemory",
-			executor.MaxMemory,
-			attrs,
-			writer,
-		)
-
-		writeMemoryMetrics(
-			metricPrefix + "app.executor.memory.",
+		addMemoryMetrics(
 			&executor.MemoryMetrics,
 			attrs,
-			writer,
 		)
 
-		writePeakMemoryMetrics(
-			metricPrefix + "app.executor.memory.peak.",
+		addPeakMemoryMetrics(
 			&executor.PeakMemoryMetrics,
 			attrs,
-			writer,
 		)
+
+		writer <- model.Event{
+			Timestamp:  Now().UnixMilli(),
+            Type:       "SparkExecutorSample",
+            Attributes: attrs,
+        }
 	}
 
 	return nil
-}
-
-func updateJobCounters(job *SparkJob, jobCounters *jobCounters) {
-	jobStatus := strings.ToLower(job.Status)
-
-	if jobStatus == "running" {
-		jobCounters.running += 1
-	} else if jobStatus == "unknown" {
-		jobCounters.unknown += 1
-	} else if jobStatus == "succeeded" {
-		jobCounters.succeeded += 1
-	} else if jobStatus == "failed" {
-		jobCounters.failed += 1
-	}
 }
 
 func collectSparkAppJobMetrics(
 	ctx context.Context,
 	client SparkApiClient,
 	sparkApp *SparkApplication,
-	metricPrefix string,
-	metricDecorator SparkMetricDecorator,
+	eventDecorator SparkEventDecorator,
+	lastRun time.Time,
 	tags map[string]string,
-	writer chan<- model.Metric,
-) error {
+	writer chan<- model.Event,
+) ([]SparkJob, error) {
 	jobs, err := client.GetApplicationJobs(ctx, sparkApp)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	jobCounters := jobCounters{}
+	completedJobs := []SparkJob{}
 
 	for _, job := range jobs {
 		log.Debugf("processing job %d (%s)", job.JobId, job.Name)
 
-		attrs := makeAppAttributesMap(
-			sparkApp,
-			tags,
-		)
-
-		attrs["sparkAppJobId"] = job.JobId
-		// The job name and job group cause very high cardinality for Databricks
-		// Notebook runs.
-		//attrs["sparkAppJobName"] = job.Name
-		//attrs["sparkAppJobGroup"] = job.JobGroup
-		attrs["sparkAppJobStatus"] = job.Status
-
-		updateJobCounters(&job, &jobCounters)
-
-		if metricDecorator != nil {
-			metricDecorator.DecorateJob(&job, attrs)
+		submissionTime, err := time.Parse(RFC3339Milli, job.SubmissionTime)
+		if err != nil {
+			log.Warnf(
+				"skipping job %d (%s) because it has an invalid submission time: %s",
+				job.JobId,
+				job.Name,
+				job.SubmissionTime,
+			)
+			continue
 		}
 
-		// Write all the things.
+		var completionTime time.Time
 
 		if job.CompletionTime != "" {
-			jobDuration, err := calcDateDifferenceMillis(
-				job.SubmissionTime,
-				job.CompletionTime,
-			)
+			completionTime, err = time.Parse(RFC3339Milli, job.CompletionTime)
 			if err != nil {
-				log.Warnf("could not calculate job duration: %v", err)
-
+				log.Warnf(
+					"skipping job %d (%s) because it has an invalid completion time: %s",
+					job.JobId,
+					job.Name,
+					job.CompletionTime,
+				)
 				continue
 			}
-
-			writeGauge(
-				metricPrefix,
-				"app.job.duration",
-				jobDuration,
-				attrs,
-				writer,
-			)
 		}
 
-		writeGauge(
-			metricPrefix,
-			"app.job.indices.completed",
-			job.NumCompletedIndices,
-			attrs,
-			writer,
-		)
+		if submissionTime.After(lastRun) {
+			// Job was submitted since the last run so we need to add a submit
+			// event for it
+			writer <- model.Event{
+				Timestamp:  Now().UnixMilli(),
+				Type:       "SparkJob",
+				Attributes: makeJobStartAttributes(
+					sparkApp,
+                    &job,
+                    eventDecorator,
+					submissionTime,
+                    tags,
+				),
+			}
+		}
 
-		attrs["sparkAppStageStatus"] = "active"
+		if completionTime.After(lastRun) {
+			// Job completed since the last run so we need to add a complete
+			// event for it
+			writer <- model.Event{
+				Timestamp:  Now().UnixMilli(),
+				Type:       "SparkJob",
+				Attributes: makeJobCompleteAttributes(
+					sparkApp,
+                    &job,
+                    eventDecorator,
+					submissionTime,
+					completionTime,
+                    tags,
+				),
+			}
 
-		writeGauge(
-			metricPrefix,
-			"app.job.stages",
-			job.NumActiveStages,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppStageStatus"] = "complete"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.stages",
-			job.NumCompletedStages,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppStageStatus"] = "skipped"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.stages",
-			job.NumSkippedStages,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppStageStatus"] = "failed"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.stages",
-			job.NumFailedStages,
-			attrs,
-			writer,
-		)
-
-		delete(attrs, "sparkAppStageStatus")
-
-		attrs["sparkAppTaskStatus"] = "active"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.tasks",
-			job.NumActiveTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "complete"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.tasks",
-			job.NumCompletedTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "skipped"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.tasks",
-			job.NumSkippedTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "failed"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.tasks",
-			job.NumFailedTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "killed"
-
-		writeGauge(
-			metricPrefix,
-			"app.job.tasks",
-			job.NumKilledTasks,
-			attrs,
-			writer,
-		)
-
-		delete(attrs, "sparkAppTaskStatus")
+			// Add the job to the list of completed jobs
+			completedJobs = append(completedJobs, job)
+        }
 	}
 
+	return completedJobs, nil
+}
+
+func makeJobBaseAttributes(
+	sparkApp *SparkApplication,
+	job *SparkJob,
+	eventDecorator SparkEventDecorator,
+	event string,
+	submissionTime time.Time,
+	tags map[string]string,
+) map[string]interface{} {
 	attrs := makeAppAttributesMap(
 		sparkApp,
 		tags,
 	)
 
-	if metricDecorator != nil {
-		metricDecorator.DecorateMetric(attrs)
+	attrs["event"] = event
+
+	attrs["jobId"] = job.JobId
+	attrs["jobName"] = job.Name
+	attrs["jobGroup"] = job.JobGroup
+	attrs["jobTags"] = strings.Join(job.JobTags, ",")
+
+	attrs["description"] = job.Description
+
+	if eventDecorator != nil {
+		eventDecorator.DecorateJob(job, attrs)
 	}
 
-	attrs["sparkAppJobStatus"] = "running"
+	attrs["submissionTime"] = submissionTime.UnixMilli()
 
-	writeGauge(
-		metricPrefix,
-		"app.jobs",
-		jobCounters.running,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppJobStatus"] = "lost"
-
-	writeGauge(
-		metricPrefix,
-		"app.jobs",
-		jobCounters.unknown,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppJobStatus"] = "succeeded"
-
-	writeGauge(
-		metricPrefix,
-		"app.jobs",
-		jobCounters.succeeded,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppJobStatus"] = "failed"
-
-	writeGauge(
-		metricPrefix,
-		"app.jobs",
-		jobCounters.failed,
-		attrs,
-		writer,
-	)
-
-	return nil
+	return attrs
 }
 
-func updateStageCounters(stage *SparkStage, stageCounters *stageCounters) {
-	stageStatus := strings.ToLower(stage.Status)
+func makeJobStartAttributes(
+	sparkApp *SparkApplication,
+    job *SparkJob,
+    eventDecorator SparkEventDecorator,
+	submissionTime time.Time,
+    tags map[string]string,
+) map[string]interface{} {
+	return makeJobBaseAttributes(
+		sparkApp,
+		job,
+		eventDecorator,
+		"start",
+		submissionTime,
+		tags,
+	)
+}
 
-	if stageStatus == "active" {
-		stageCounters.active += 1
-	} else if stageStatus == "pending" {
-		stageCounters.pending += 1
-	} else if stageStatus == "complete" {
-		stageCounters.complete += 1
-	} else if stageStatus == "failed" {
-		stageCounters.failed += 1
-	} else if stageStatus == "skipped" {
-		stageCounters.skipped += 1
-	}
+func makeJobCompleteAttributes(
+	sparkApp *SparkApplication,
+    job *SparkJob,
+    eventDecorator SparkEventDecorator,
+	submissionTime time.Time,
+	completionTime time.Time,
+    tags map[string]string,
+) map[string]interface{} {
+	// We want the complete event to have everything in the start event
+	attrs := makeJobStartAttributes(
+		sparkApp,
+		job,
+		eventDecorator,
+		submissionTime,
+		tags,
+	)
+
+	// Except the event type should be set to "complete"
+	attrs["event"] = "complete"
+
+	// And it should have the following additional attributes
+	attrs["status"] = strings.ToLower(job.Status)
+	attrs["completionTime"] = completionTime.UnixMilli()
+	attrs["duration"] = completionTime.Sub(submissionTime).Milliseconds()
+
+	attrs["completedIndexCount"] = job.NumCompletedIndices
+	attrs["activeStageCount"] = job.NumActiveStages
+	attrs["completedStageCount"] = job.NumCompletedStages
+	attrs["skippedStageCount"] = job.NumSkippedStages
+	attrs["failedStageCount"] = job.NumFailedStages
+	attrs["taskCount"] = job.NumTasks
+	attrs["activeTaskCount"] = job.NumActiveTasks
+	attrs["completedTaskCount"] = job.NumCompletedTasks
+	attrs["skippedTaskCount"] = job.NumSkippedTasks
+	attrs["failedTaskCount"] = job.NumFailedTasks
+	attrs["killedTaskCount"] = job.NumKilledTasks
+
+	return attrs
 }
 
 func collectSparkAppStageMetrics(
 	ctx context.Context,
 	client SparkApiClient,
 	sparkApp *SparkApplication,
-	metricPrefix string,
-	metricDecorator SparkMetricDecorator,
+	completedJobs []SparkJob,
+	eventDecorator SparkEventDecorator,
+	lastRun time.Time,
 	tags map[string]string,
-	writer chan<- model.Metric,
+	writer chan<- model.Event,
 ) error {
 	stages, err := client.GetApplicationStages(ctx, sparkApp)
 	if err != nil {
 		return err
 	}
 
-	stageCounters := stageCounters{}
-
 	for _, stage := range stages {
-		log.Debugf("processing stage %d (%s)", stage.StageId, stage.Name)
-
-		stageStatus := strings.ToLower(stage.Status)
-
-		attrs := makeAppAttributesMap(
-			sparkApp,
-			tags,
-		)
-
-		attrs["sparkAppStageName"] = stage.Name
-		attrs["sparkAppStageStatus"] = stageStatus
-		// @TODO: The attributes below may cause high cardinality. Further
-		// investigation is needed.
-		attrs["sparkAppStageId"] = stage.StageId
-		attrs["sparkAppStageAttemptId"] = stage.AttemptId
-		//attrs["sparkAppStageSchedulingPool"] = stage.SchedulingPool
-		//attrs["sparkAppStageResourceProfileId"] = stage.ResourceProfileId
-
-		updateStageCounters(&stage, &stageCounters)
-
-		if metricDecorator != nil {
-			metricDecorator.DecorateStage(&stage, attrs)
-		}
-
-		// Write all the things.
-
-		if stage.CompletionTime != "" {
-			stageDuration, err := calcDateDifferenceMillis(
+		if log.IsDebugEnabled() {
+			log.Debugf(
+				"processing stage %d (%s), status: %s, firstTaskLaunchedTime: %s, completionTime: %s, lastRun: %s",
+				stage.StageId,
+				stage.Name,
+				stage.Status,
 				stage.FirstTaskLaunchedTime,
 				stage.CompletionTime,
+				lastRun.Format(RFC3339Milli),
 			)
-			if err != nil {
-				log.Warnf("could not calculate stage duration: %v", err)
+		}
 
-				continue
+		// First, handle skipped stages as special cases.
+		if strings.ToLower(stage.Status) == "skipped" {
+			if shouldReportSkippedStage(completedJobs, &stage) {
+				writer <- model.Event{
+					Timestamp:  Now().UnixMilli(),
+					Type:       "SparkStage",
+					Attributes: makeStageSkippedAttributes(
+						sparkApp,
+						&stage,
+						eventDecorator,
+						tags,
+					),
+				}
 			}
 
-			writeGauge(
-				metricPrefix,
-				"app.stage.duration",
-				stageDuration,
-				attrs,
-				writer,
-			)
+			continue
 		}
 
-		writeGauge(
-			metricPrefix,
-			"app.stage.peakNettyDirectMemory",
-			stage.PeakNettyDirectMemory,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.peakJvmDirectMemory",
-			stage.PeakJvmDirectMemory,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.peakSparkDirectMemoryOverLimit",
-			stage.PeakSparkDirectMemoryOverLimit,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.peakTotalOffHeapMemory",
-			stage.PeakTotalOffHeapMemory,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.executor.deserializeTime",
-			stage.ExecutorDeserializeTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.executor.deserializeCpuTime",
-			stage.ExecutorDeserializeCpuTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.executor.runTime",
-			stage.ExecutorRunTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.executor.cpuTime",
-			stage.ExecutorCpuTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.resultSize",
-			stage.ResultSize,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.jvmGcTime",
-			stage.JvmGcTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.resultSerializationTime",
-			stage.ResultSerializationTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.memoryBytesSpilled",
-			stage.MemoryBytesSpilled,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.diskBytesSpilled",
-			stage.DiskBytesSpilled,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.peakExecutionMemory",
-			stage.PeakExecutionMemory,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.inputBytes",
-			stage.InputBytes,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.inputRecords",
-			stage.InputRecords,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.outputBytes",
-			stage.OutputBytes,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.outputRecords",
-			stage.OutputRecords,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.remoteBlocksFetched",
-			stage.ShuffleRemoteBlocksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.localBlocksFetched",
-			stage.ShuffleLocalBlocksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.fetchWaitTime",
-			stage.ShuffleFetchWaitTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.remoteBytesRead",
-			stage.ShuffleRemoteBytesRead,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.remoteBytesReadToDisk",
-			stage.ShuffleRemoteBytesReadToDisk,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.localBytesRead",
-			stage.ShuffleLocalBytesRead,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.readBytes",
-			stage.ShuffleReadBytes,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.readRecords",
-			stage.ShuffleReadRecords,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.corruptMergedClockChunks",
-			stage.ShuffleCorruptMergedBlockChunks,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedFetchFallbackCount",
-			stage.ShuffleMergedFetchFallbackCount,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedRemoteBlocksFetched",
-			stage.ShuffleMergedRemoteBlocksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedLocalBlocksFetched",
-			stage.ShuffleMergedLocalBlocksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedRemoteChunksFetched",
-			stage.ShuffleMergedRemoteChunksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedLocalChunksFetched",
-			stage.ShuffleMergedLocalChunksFetched,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedRemoteBytesRead",
-			stage.ShuffleMergedRemoteBytesRead,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedLocalBytesRead",
-			stage.ShuffleMergedLocalBytesRead,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.remoteReqsDuration",
-			stage.ShuffleRemoteReqsDuration,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergedRemoteReqsDuration",
-			stage.ShuffleMergedRemoteReqsDuration,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.writeBytes",
-			stage.ShuffleWriteBytes,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.writeTime",
-			stage.ShuffleWriteTime,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.writeRecords",
-			stage.ShuffleWriteRecords,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.stage.shuffle.mergersCount",
-			stage.ShuffleMergersCount,
-			attrs,
-			writer,
-		)
+		if stage.FirstTaskLaunchedTime == "" {
+			// There are legitimate cases where a stage does not have a first
+			// task launched time. For example, in testing, when the status was
+			// "PENDING" or "SKIPPED", the first task launched time, along with
+			// the submission time and completion time, were not included on the
+			// response. We handle "SKIPPED" as a special case above. For other
+			// cases, I don't believe the lack of a first launched time is an
+			// error condition so don't produce a warning, just log it and skip
+			// the stage.
 
+			log.Debugf(
+				"skipping stage %d (%s) because it has no first task launched time",
+				stage.StageId,
+				stage.Name,
+			)
+			continue
+		}
+
+		firstTaskLaunchedTime, err := time.Parse(
+			RFC3339Milli,
+			stage.FirstTaskLaunchedTime,
+		)
+		if err != nil {
+			log.Warnf(
+				"skipping stage %d (%s) because it has an invalid first task launched time: %s",
+				stage.StageId,
+				stage.Name,
+				stage.FirstTaskLaunchedTime,
+			)
+			continue
+		}
+
+		var completionTime time.Time
+
+		if stage.CompletionTime != "" {
+			completionTime, err = time.Parse(RFC3339Milli, stage.CompletionTime)
+			if err != nil {
+				log.Warnf(
+					"skipping stage %d (%s) because it has an invalid completion time: %s",
+					stage.StageId,
+					stage.Name,
+					stage.CompletionTime,
+				)
+				continue
+			}
+		}
+
+		if !completionTime.IsZero() && completionTime.Before(lastRun) {
+			// Stage completed before the last run so we don't need to do
+			// anything with it.
+			log.Debugf(
+				"skipping stage %d (%s) because it completed before the last run",
+				stage.StageId,
+				stage.Name,
+			)
+			continue
+		}
+
+		if firstTaskLaunchedTime.After(lastRun) {
+			// Stage was started since the last run so we need to add a start
+			// event for it
+			writer <- model.Event{
+				Timestamp:  Now().UnixMilli(),
+				Type:       "SparkStage",
+				Attributes: makeStageStartAttributes(
+					sparkApp,
+                    &stage,
+                    eventDecorator,
+					firstTaskLaunchedTime,
+                    tags,
+				),
+			}
+		}
+
+		if completionTime.After(lastRun) {
+			// Stage completed since the last run so we need to add a complete
+			// event for it
+			writer <- model.Event{
+				Timestamp:  Now().UnixMilli(),
+				Type:       "SparkStage",
+				Attributes: makeStageCompleteAttributes(
+					sparkApp,
+					&stage,
+					eventDecorator,
+					firstTaskLaunchedTime,
+					completionTime,
+					tags,
+				),
+			}
+		}
+
+		// Now process the tasks in the stage
 		for _, task := range stage.Tasks {
-			writeStageTaskMetrics(
-				metricPrefix + "app.stage.task.",
-				metricDecorator,
+			if log.IsDebugEnabled() {
+				log.Debugf(
+					"processing task %d, status: %s, launchTime: %s, duration: %d, lastRun: %s",
+					task.TaskId,
+					task.Status,
+					task.LaunchTime,
+					task.Duration,
+					lastRun.Format(RFC3339Milli),
+				)
+			}
+
+			processSparkAppStageTask(
+				sparkApp,
 				&stage,
 				&task,
-				attrs,
+				eventDecorator,
+				lastRun,
+				tags,
 				writer,
 			)
 		}
-
-		writePeakMemoryMetrics(
-			metricPrefix + "app.stage.executor.memory.peak.",
-			&stage.PeakExecutorMetrics,
-			attrs,
-			writer,
-		)
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.tasks.total",
-			stage.NumTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "active"
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.tasks",
-			stage.NumActiveTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "complete"
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.tasks",
-			stage.NumCompleteTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "failed"
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.tasks",
-			stage.NumFailedTasks,
-			attrs,
-			writer,
-		)
-
-		attrs["sparkAppTaskStatus"] = "killed"
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.tasks",
-			stage.NumKilledTasks,
-			attrs,
-			writer,
-		)
-
-		delete(attrs, "sparkAppTaskStatus")
-
-		writeGauge(
-			metricPrefix,
-			"app.stage.indices.completed",
-			stage.NumCompletedIndices,
-			attrs,
-			writer,
-		)
 	}
-
-	attrs := makeAppAttributesMap(
-		sparkApp,
-		tags,
-	)
-
-	if metricDecorator != nil {
-		metricDecorator.DecorateMetric(attrs)
-	}
-
-	attrs["sparkAppStageStatus"] = "active"
-
-	writeGauge(
-		metricPrefix,
-		"app.stages",
-		stageCounters.active,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppStageStatus"] = "pending"
-
-	writeGauge(
-		metricPrefix,
-		"app.stages",
-		stageCounters.pending,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppStageStatus"] = "complete"
-
-	writeGauge(
-		metricPrefix,
-		"app.stages",
-		stageCounters.complete,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppStageStatus"] = "failed"
-
-	writeGauge(
-		metricPrefix,
-		"app.stages",
-		stageCounters.failed,
-		attrs,
-		writer,
-	)
-
-	attrs["sparkAppStageStatus"] = "skipped"
-
-	writeGauge(
-		metricPrefix,
-		"app.stages",
-		stageCounters.skipped,
-		attrs,
-		writer,
-	)
 
 	return nil
 }
 
-func writeStageTaskMetrics(
-	metricPrefix string,
-	metricDecorator SparkMetricDecorator,
+func makeStageBaseAttributes(
+	sparkApp *SparkApplication,
 	stage *SparkStage,
-	task *SparkTask,
-	attrs map[string]interface{},
-	writer chan<- model.Metric,
-) {
-	log.Debugf("processing task %d", task.TaskId)
+	eventDecorator SparkEventDecorator,
+	event string,
+	tags map[string]string,
+) map[string]interface{} {
+	attrs := makeAppAttributesMap(sparkApp, tags)
 
-	taskStatus := strings.ToLower(task.Status)
+	attrs["event"] = event
 
-	taskMetricAttrs := maps.Clone(attrs)
+	attrs["stageId"] = stage.StageId
+	attrs["jobDescription"] = stage.Description
+	attrs["stageName"] = stage.Name
+	attrs["details"] = stage.Details[:min(len(stage.Details), 4096)]
+	attrs["attemptId"] = stage.AttemptId
+	// @TODO: is this an id or a name or something else?
+	attrs["schedulingPool"] = stage.SchedulingPool
+	attrs["resourceProfileId"] = stage.ResourceProfileId
 
-	taskMetricAttrs["sparkAppTaskExecutorId"] = task.ExecutorId
-	taskMetricAttrs["sparkAppTaskStatus"] = taskStatus
-	taskMetricAttrs["sparkAppTaskLocality"] = task.TaskLocality
-	taskMetricAttrs["sparkAppTaskSpeculative"] = task.Speculative
-	// @TODO: The attributes below may cause high cardinality. Further
-	// investigation is needed.
-	taskMetricAttrs["sparkAppTaskId"] = task.TaskId
-	taskMetricAttrs["sparkAppTaskAttempt"] = task.Attempt
-	//attrs["sparkAppTaskPartitionId"] = task.PartitionId
-
-	if metricDecorator != nil {
-		metricDecorator.DecorateTask(stage, task, taskMetricAttrs)
+	if eventDecorator != nil {
+		eventDecorator.DecorateStage(stage, attrs)
 	}
 
-	writeGauge(
-		metricPrefix,
-		"duration",
-		task.Duration,
-		taskMetricAttrs,
-		writer,
+	return attrs
+}
+
+func makeStageSkippedAttributes(
+	sparkApp *SparkApplication,
+	stage *SparkStage,
+	eventDecorator SparkEventDecorator,
+	tags map[string]string,
+) map[string]interface{} {
+	attrs := makeStageBaseAttributes(
+		sparkApp,
+		stage,
+		eventDecorator,
+		"complete",
+		tags,
 	)
+
+	attrs["status"] = strings.ToLower(stage.Status)
+	// @TODO: double check if submission time is set
+	attrs["taskCount"] = stage.NumTasks
+
+	return attrs
+}
+
+func makeStageStartAttributes(
+	sparkApp *SparkApplication,
+    stage *SparkStage,
+    eventDecorator SparkEventDecorator,
+	firstTaskLaunchedTime time.Time,
+    tags map[string]string,
+) map[string]interface{} {
+	attrs := makeStageBaseAttributes(
+		sparkApp,
+		stage,
+		eventDecorator,
+		"start",
+		tags,
+	)
+
+	attrs["firstTaskLaunchedTime"] = firstTaskLaunchedTime.UnixMilli()
+
+	submissionTime, err := time.Parse(RFC3339Milli, stage.SubmissionTime)
+	if err != nil {
+		log.Warnf(
+			"ignoring invalid submission time for stage %d (%s): %s",
+			stage.StageId,
+			stage.Name,
+			stage.SubmissionTime,
+		)
+	} else {
+		attrs["submissionTime"] = submissionTime.UnixMilli()
+	}
+
+	return attrs
+}
+
+func makeStageCompleteAttributes(
+	sparkApp *SparkApplication,
+    stage *SparkStage,
+    eventDecorator SparkEventDecorator,
+	firstTaskLaunchedTime time.Time,
+	completionTime time.Time,
+    tags map[string]string,
+) map[string]interface{} {
+	// We want the complete event to have everything in the start event
+	attrs := makeStageStartAttributes(
+		sparkApp,
+		stage,
+		eventDecorator,
+		firstTaskLaunchedTime,
+		tags,
+	)
+
+	// Except the event type should be set to "complete"
+	attrs["event"] = "complete"
+
+	// And it should have the following additional attributes
+	attrs["status"] = strings.ToLower(stage.Status)
+	attrs["completionTime"] = completionTime.UnixMilli()
+	attrs["duration"] = completionTime.Sub(firstTaskLaunchedTime).Milliseconds()
+
+	attrs["taskCount"] = stage.NumTasks
+	attrs["activeTaskCount"] = stage.NumActiveTasks
+	attrs["completedTaskCount"] = stage.NumCompleteTasks
+	attrs["failedTaskCount"] = stage.NumFailedTasks
+	attrs["killedTaskCount"] = stage.NumKilledTasks
+	attrs["completedIndexCount"] = stage.NumCompletedIndices
+	attrs["executorDeserializeDuration"] = stage.ExecutorDeserializeTime
+	attrs["executorDeserializeCpuDuration"] =
+		stage.ExecutorDeserializeCpuTime
+	attrs["executorRunDuration"] = stage.ExecutorRunTime
+	attrs["executorCpuDuration"] = stage.ExecutorCpuTime
+	attrs["resultSizeBytes"] = stage.ResultSize
+	attrs["gcDuration"] = stage.JvmGcTime
+	attrs["resultSerializationDuration"] = stage.ResultSerializationTime
+	attrs["memorySpilledBytes"] = stage.MemoryBytesSpilled
+	attrs["diskSpilledBytes"] = stage.DiskBytesSpilled
+	attrs["peakExecutionMemoryUsedBytes"] = stage.PeakExecutionMemory
+	attrs["inputBytes"] = stage.InputBytes
+	attrs["inputRecords"] = stage.InputRecords
+	attrs["outputBytes"] = stage.OutputBytes
+	attrs["outputRecords"] = stage.OutputRecords
+	attrs["shuffleRemoteFetchedBlockCount"] =
+		stage.ShuffleRemoteBlocksFetched
+	attrs["shuffleLocalFetchedBlockCount"] = stage.ShuffleLocalBlocksFetched
+	attrs["shuffleFetchWaitDuration"] = stage.ShuffleFetchWaitTime
+	attrs["shuffleRemoteReadBytes"] = stage.ShuffleRemoteBytesRead
+	attrs["shuffleRemoteReadToDiskBytes"] =
+		stage.ShuffleRemoteBytesReadToDisk
+	attrs["shuffleLocalReadBytes"] = stage.ShuffleLocalBytesRead
+	attrs["shuffleReadBytes"] = stage.ShuffleReadBytes
+	attrs["shuffleReadRecords"] = stage.ShuffleReadRecords
+	attrs["shuffleCorruptMergedBlockChunkCount"] =
+		stage.ShuffleCorruptMergedBlockChunks
+	attrs["shuffleMergedFetchFallbackCount"] =
+		stage.ShuffleMergedFetchFallbackCount
+	attrs["shuffleRemoteMergedFetchedBlockCount"] =
+		stage.ShuffleMergedRemoteBlocksFetched
+	attrs["shuffleLocalMergedFetchedBlockCount"] =
+		stage.ShuffleMergedLocalBlocksFetched
+	attrs["shuffleRemoteMergedFetchedChunkCount"] =
+		stage.ShuffleMergedRemoteChunksFetched
+	attrs["shuffleLocalMergedFetchedChunkCount"] =
+		stage.ShuffleMergedLocalChunksFetched
+	attrs["shuffleRemoteMergedReadBytes"] =
+		stage.ShuffleMergedRemoteBytesRead
+	attrs["shuffleLocalMergedReadBytes"] = stage.ShuffleMergedLocalBytesRead
+	attrs["shuffleRemoteReqsDuration"] = stage.ShuffleRemoteReqsDuration
+	attrs["shuffleRemoteMergedReqsDuration"] =
+		stage.ShuffleMergedRemoteReqsDuration
+	attrs["shuffleWriteBytes"] = stage.ShuffleWriteBytes
+	attrs["shuffleWriteDuration"] = stage.ShuffleWriteTime
+	attrs["shuffleWriteRecords"] = stage.ShuffleWriteRecords
+	attrs["shuffleMergersCount"] = stage.ShuffleMergersCount
+
+	// The next 4 are Databricks only attributes, not present in the regular
+	// Spark metrics. I don't know what they are for, whether used or free or
+	// total or bytes or something else so I'm leaving the names as the same
+	// as we get them in the API call. Prefixing them with "stage." to
+	// differentiate them from the same named peak memory metrics added in
+	// addPeakMemoryMetrics.
+	attrs["stage.peakNettyDirectMemory"] = stage.PeakNettyDirectMemory
+	attrs["stage.peakJvmDirectMemory"] = stage.PeakJvmDirectMemory
+	attrs["stage.peakSparkDirectMemoryOverLimit"] =
+		stage.PeakSparkDirectMemoryOverLimit
+	attrs["stage.peakTotalOffHeapMemory"] = stage.PeakTotalOffHeapMemory
+
+	// Add the peak memory metrics
+	addPeakMemoryMetrics(
+		&stage.PeakExecutorMetrics,
+		attrs,
+	)
+
+	return attrs
+}
+
+func processSparkAppStageTask(
+	sparkApp *SparkApplication,
+	stage *SparkStage,
+	task *SparkTask,
+	eventDecorator SparkEventDecorator,
+	lastRun time.Time,
+	tags map[string]string,
+	writer chan<- model.Event,
+) {
+	if task.LaunchTime == "" {
+		// It's possible there are legitimate cases where a task does not
+		// have a launch time. For example, when the status is "PENDING"
+		// it is conceivable that the launch time would be empty based on the
+		// fact that we know this to be the case for stages. I was not able to
+		// confirm this like I was for stages but for now we'll assume empty
+		// launch times are legitimate cases and not error conditions, so don't
+		// produce a warning, just log it and skip the task.
+		log.Debugf(
+			"skipping task %d because it has no launch time",
+			task.TaskId,
+		)
+		return
+	}
+
+	launchTime, err := time.Parse(RFC3339Milli, task.LaunchTime)
+	if err != nil {
+		log.Warnf(
+			"skipping task %d because it has an invalid launch time: %s",
+			task.TaskId,
+			task.LaunchTime,
+		)
+		return
+	}
+
+	status := strings.ToLower(task.Status)
+
+	var completionTime time.Time
+
+	if status == "success" || status == "failed" || status == "killed" {
+		// If the task is in a completion state, we can use the launch time and
+		// the duration to calculate the completion time.
+		completionTime = launchTime.Add(
+			time.Duration(task.Duration) * time.Millisecond,
+		)
+
+		if log.IsDebugEnabled() {
+			log.Debugf(
+				"calculated completion time for task %d: %s",
+				task.TaskId,
+				completionTime.Format(RFC3339Milli),
+			)
+		}
+	}
+
+	if launchTime.After(lastRun) {
+		// Task was launched since the last run so we need to add a start
+		// event for it
+		writer <- model.Event{
+			Timestamp:  Now().UnixMilli(),
+			Type:       "SparkTask",
+			Attributes: makeTaskStartAttributes(
+				sparkApp,
+				stage,
+				task,
+				eventDecorator,
+				launchTime,
+				tags,
+			),
+		}
+	}
+
+	if completionTime.After(lastRun) {
+		// Task completed since the last run so we need to add a complete
+		// event for it
+		writer <- model.Event{
+			Timestamp:  Now().UnixMilli(),
+			Type:       "SparkTask",
+			Attributes: makeTaskCompleteAttributes(
+				sparkApp,
+				stage,
+				task,
+				eventDecorator,
+				launchTime,
+				completionTime,
+				tags,
+			),
+		}
+	}
+}
+
+func makeTaskBaseAttributes(
+	sparkApp *SparkApplication,
+	stage *SparkStage,
+	task *SparkTask,
+	eventDecorator SparkEventDecorator,
+	event string,
+	launchTime time.Time,
+	tags map[string]string,
+) map[string]interface{} {
+	attrs := makeAppAttributesMap(sparkApp, tags)
+
+	attrs["event"] = event
+
+	attrs["stageId"] = stage.StageId
+	attrs["jobDescription"] = stage.Description
+	attrs["stageName"] = stage.Name
+	attrs["stageStatus"] = strings.ToLower(stage.Status)
+	attrs["stageAttemptId"] = stage.AttemptId
+	attrs["taskId"] = task.TaskId
+	attrs["index"] = task.Index
+	attrs["attemptId"] = task.Attempt
+	attrs["executorId"] = task.ExecutorId
+	attrs["locality"] = task.TaskLocality
+	attrs["speculative"] = task.Speculative
+	attrs["partitionId"] = task.PartitionId
+
+	if eventDecorator != nil {
+		eventDecorator.DecorateTask(stage, task, attrs)
+	}
+
+	attrs["launchTime"] = launchTime.UnixMilli()
+
+	return attrs
+}
+
+func makeTaskStartAttributes(
+	sparkApp *SparkApplication,
+	stage *SparkStage,
+	task *SparkTask,
+	eventDecorator SparkEventDecorator,
+	launchTime time.Time,
+	tags map[string]string,
+) map[string]interface{} {
+	return makeTaskBaseAttributes(
+		sparkApp,
+		stage,
+		task,
+		eventDecorator,
+		"start",
+		launchTime,
+		tags,
+	)
+}
+
+func makeTaskCompleteAttributes(
+	sparkApp *SparkApplication,
+	stage *SparkStage,
+	task *SparkTask,
+	eventDecorator SparkEventDecorator,
+	launchTime time.Time,
+	completionTime time.Time,
+	tags map[string]string,
+) map[string]interface{} {
+	// We want the complete event to have everything in the start event
+	attrs := makeTaskStartAttributes(
+		sparkApp,
+		stage,
+		task,
+		eventDecorator,
+		launchTime,
+		tags,
+	)
+
+	// Except the event type should be set to "complete"
+	attrs["event"] = "complete"
+
+	// And it should have the following additional attributes
+	attrs["status"] = strings.ToLower(task.Status)
+	attrs["completionTime"] = completionTime.UnixMilli()
+	attrs["duration"] = task.Duration
+	attrs["schedulerDelay"] = task.SchedulerDelay
+	attrs["gettingResultDuration"] = task.GettingResultTime
 
 	taskMetrics := task.TaskMetrics
 
-	writeGauge(
-		metricPrefix,
-		"executorDeserializeTime",
-		taskMetrics.ExecutorDeserializeTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"executorDeserializeCpuTime",
-		taskMetrics.ExecutorDeserializeCpuTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"executorRunTime",
-		taskMetrics.ExecutorRunTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"executorCpuTime",
-		taskMetrics.ExecutorCpuTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"resultSize",
-		taskMetrics.ResultSize,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"jvmGcTime",
-		taskMetrics.JvmGcTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"resultSerializationTime",
-		taskMetrics.ResultSerializationTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"memoryBytesSpilled",
-		taskMetrics.MemoryBytesSpilled,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"diskBytesSpilled",
-		taskMetrics.DiskBytesSpilled,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"peakExecutionMemory",
-		taskMetrics.PeakExecutionMemory,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"input.bytesRead",
-		taskMetrics.InputMetrics.BytesRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"input.recordsRead",
-		taskMetrics.InputMetrics.RecordsRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"output.bytesWritten",
-		taskMetrics.OutputMetrics.BytesWritten,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"output.recordsWritten",
-		taskMetrics.OutputMetrics.RecordsWritten,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.remoteBlocksFetched",
-		taskMetrics.ShuffleReadMetrics.RemoteBlocksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.localBlocksFetched",
-		taskMetrics.ShuffleReadMetrics.LocalBlocksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.fetchWaitTime",
-		taskMetrics.ShuffleReadMetrics.FetchWaitTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.remoteBytesRead",
-		taskMetrics.ShuffleReadMetrics.RemoteBytesRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.remoteBytesReadToDisk",
-		taskMetrics.ShuffleReadMetrics.RemoteBytesReadToDisk,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.localBytesRead",
-		taskMetrics.ShuffleReadMetrics.LocalBytesRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.recordsRead",
-		taskMetrics.ShuffleReadMetrics.RecordsRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.remoteReqsDuration",
-		taskMetrics.ShuffleReadMetrics.RemoteReqsDuration,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.corruptMergedBlockChunks",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.CorruptMergedBlockChunks,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.mergedFetchFallbackCount",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.MergedFetchFallbackCount,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.remoteMergedBlocksFetched",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedBlocksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.localMergedBlocksFetched",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedBlocksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.remoteMergedChunksFetched",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedChunksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.localMergedChunksFetched",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedChunksFetched,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.remoteMergedBytesRead",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedBytesRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.localMergedBytesRead",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedBytesRead,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.read.push.remoteMergedReqsDuration",
-		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedReqsDuration,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.write.bytesWritten",
-		taskMetrics.ShuffleWriteMetrics.BytesWritten,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.write.writeTime",
-		taskMetrics.ShuffleWriteMetrics.WriteTime,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"shuffle.write.recordsWritten",
-		taskMetrics.ShuffleWriteMetrics.RecordsWritten,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"photon.offHeapMinMemorySize",
-		taskMetrics.PhotonMemoryMetrics.OffHeapMinMemorySize,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"photon.offHeapMaxMemorySize",
-		taskMetrics.PhotonMemoryMetrics.OffHeapMaxMemorySize,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"photon.photonBufferPoolMinMemorySize",
-		taskMetrics.PhotonMemoryMetrics.PhotonBufferPoolMinMemorySize,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"photon.photonBufferPoolMaxMemorySize",
-		taskMetrics.PhotonMemoryMetrics.PhotonBufferPoolMaxMemorySize,
-		taskMetricAttrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"photon.photonizedTaskTimeNs",
-		taskMetrics.PhotonizedTaskTimeNs,
-		taskMetricAttrs,
-		writer,
-	)
+	attrs["executorDeserializeDuration"] = taskMetrics.ExecutorDeserializeTime
+	attrs["executorDeserializeCpuDuration"] =
+		taskMetrics.ExecutorDeserializeCpuTime
+	attrs["executorRunDuration"] = taskMetrics.ExecutorRunTime
+	attrs["executorCpuDuration"] = taskMetrics.ExecutorCpuTime
+	attrs["resultSizeBytes"] = taskMetrics.ResultSize
+	attrs["gcDuration"] = taskMetrics.JvmGcTime
+	attrs["resultSerializationDuration"] = taskMetrics.ResultSerializationTime
+	attrs["memorySpilledBytes"] = taskMetrics.MemoryBytesSpilled
+	attrs["diskSpilledBytes"] = taskMetrics.DiskBytesSpilled
+	attrs["peakExecutionMemoryUsedBytes"] = taskMetrics.PeakExecutionMemory
+	attrs["inputReadBytes"] = taskMetrics.InputMetrics.BytesRead
+	attrs["inputReadRecords"] = taskMetrics.InputMetrics.RecordsRead
+	attrs["outputWriteBytes"] = taskMetrics.OutputMetrics.BytesWritten
+	attrs["outputWriteRecords"] = taskMetrics.OutputMetrics.RecordsWritten
+	attrs["shuffleReadRemoteFetchedBlockCount"] =
+		taskMetrics.ShuffleReadMetrics.RemoteBlocksFetched
+	attrs["shuffleReadLocalFetchedBlockCount"] =
+		taskMetrics.ShuffleReadMetrics.LocalBlocksFetched
+	attrs["shuffleReadFetchWaitDuration"] =
+		taskMetrics.ShuffleReadMetrics.FetchWaitTime
+	attrs["shuffleReadRemoteReadBytes"] =
+		taskMetrics.ShuffleReadMetrics.RemoteBytesRead
+	attrs["shuffleReadRemoteReadToDiskBytes"] =
+		taskMetrics.ShuffleReadMetrics.RemoteBytesReadToDisk
+	attrs["shuffleReadLocalReadBytes"] =
+		taskMetrics.ShuffleReadMetrics.LocalBytesRead
+	attrs["shuffleReadReadRecords"] = taskMetrics.ShuffleReadMetrics.RecordsRead
+	attrs["shuffleReadRemoteReqsDuration"] =
+		taskMetrics.ShuffleReadMetrics.RemoteReqsDuration
+	attrs["shufflePushReadCorruptMergedBlockChunkCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.CorruptMergedBlockChunks
+	attrs["shufflePushReadMergedFetchFallbackCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.MergedFetchFallbackCount
+	attrs["shufflePushReadRemoteMergedFetchedBlockCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedBlocksFetched
+	attrs["shufflePushReadLocalMergedFetchedBlockCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedBlocksFetched
+	attrs["shufflePushReadRemoteMergedFetchedChunkCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedChunksFetched
+	attrs["shufflePushReadLocalMergedFetchedChunkCount"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedChunksFetched
+	attrs["shufflePushReadRemoteMergedReadBytes"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedBytesRead
+	attrs["shufflePushReadLocalMergedReadBytes"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.LocalMergedBytesRead
+	attrs["shufflePushReadRemoteMergedReqsDuration"] =
+		taskMetrics.ShuffleReadMetrics.SufflePushReadMetrics.RemoteMergedReqsDuration
+	attrs["shuffleWriteWriteBytes"] =
+		taskMetrics.ShuffleWriteMetrics.BytesWritten
+	attrs["shuffleWriteWriteDuration"] =
+		taskMetrics.ShuffleWriteMetrics.WriteTime
+	attrs["shuffleWriteWriteRecords"] =
+		taskMetrics.ShuffleWriteMetrics.RecordsWritten
+
+	// The next 4 are Databricks only attributes, not present in the regular
+	// Spark metrics. I don't know what they are for, whether used or free or
+	// total or bytes or something else so I'm leaving the names as the same
+	// as we get them in the API call.
+	attrs["photonOffHeapMinMemorySize"] =
+		taskMetrics.PhotonMemoryMetrics.OffHeapMinMemorySize
+	attrs["photonOffHeapMaxMemorySize"] =
+		taskMetrics.PhotonMemoryMetrics.OffHeapMaxMemorySize
+	attrs["photonBufferPoolMinMemorySize"] =
+		taskMetrics.PhotonMemoryMetrics.PhotonBufferPoolMinMemorySize
+	attrs["photonBufferPoolMaxMemorySize"] =
+		taskMetrics.PhotonMemoryMetrics.PhotonBufferPoolMaxMemorySize
+	attrs["photonizedTaskTimeNs"] = taskMetrics.PhotonizedTaskTimeNs
+	attrs["snapStartedTaskCount"] = taskMetrics.SnapStartedTaskCount
+
+	return attrs
 }
 
 func collectSparkAppRDDMetrics(
 	ctx context.Context,
 	client SparkApiClient,
 	sparkApp *SparkApplication,
-	metricPrefix string,
-	metricDecorator SparkMetricDecorator,
+	eventDecorator SparkEventDecorator,
 	tags map[string]string,
-	writer chan<- model.Metric,
+	writer chan<- model.Event,
 ) error {
 	rdds, err := client.GetApplicationRDDs(ctx, sparkApp)
 	if err != nil {
@@ -1432,364 +1058,160 @@ func collectSparkAppRDDMetrics(
 			tags,
 		)
 
-		attrs["sparkAppRDDId"] = rdd.Id
-		attrs["sparkAppRDDName"] = rdd.Name
+		attrs["rddId"] = rdd.Id
+		attrs["rddName"] = rdd.Name
+		attrs["partitionCount"] = rdd.NumPartitions
+		attrs["cachedPartitionCount"] = rdd.NumCachedPartitions
+		attrs["storageLevel"] = rdd.StorageLevel
+		attrs["memoryUsedBytes"] = rdd.MemoryUsed
+		attrs["diskUsedBytes"] = rdd.DiskUsed
 
-		if metricDecorator != nil {
-			metricDecorator.DecorateRDD(&rdd, attrs)
+		if eventDecorator != nil {
+			eventDecorator.DecorateRDD(&rdd, attrs)
 		}
 
-		writeGauge(
-			metricPrefix,
-			"app.storage.rdd.partitions",
-			rdd.NumPartitions,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.storage.rdd.cachedPartitions",
-			rdd.NumCachedPartitions,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.storage.rdd.memory.used",
-			rdd.MemoryUsed,
-			attrs,
-			writer,
-		)
-		writeGauge(
-			metricPrefix,
-			"app.storage.rdd.disk.used",
-			rdd.DiskUsed,
-			attrs,
-			writer,
-		)
+		writer <- model.Event{
+			Timestamp:  Now().UnixMilli(),
+            Type:       "SparkRDDSample",
+            Attributes: attrs,
+        }
 
 		for index, distribution := range rdd.DataDistribution {
-			rddDistributionAttrs := maps.Clone(attrs)
+			distributionAttrs := makeAppAttributesMap(sparkApp, tags)
 
-			rddDistributionAttrs["sparkAppRddDistributionIndex"] = index
+			if eventDecorator != nil {
+				eventDecorator.DecorateEvent(distributionAttrs)
+			}
 
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.used",
-				distribution.MemoryUsed,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.remaining",
-				distribution.MemoryRemaining,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.disk.used",
-				distribution.DiskUsed,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.usedOnHeap",
-				distribution.OnHeapMemoryUsed,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.usedOffHeap",
-				distribution.OffHeapMemoryUsed,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.remainingOnHeap",
-				distribution.OnHeapMemoryRemaining,
-				rddDistributionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.distribution.memory.remainingOffHeap",
-				distribution.OffHeapMemoryRemaining,
-				rddDistributionAttrs,
-				writer,
-			)
+			distributionAttrs["rddId"] = rdd.Id
+			distributionAttrs["rddName"] = rdd.Name
+			distributionAttrs["distributionIndex"] = index
+			distributionAttrs["memoryUsedBytes"] = distribution.MemoryUsed
+			distributionAttrs["memoryFreeBytes"] = distribution.MemoryRemaining
+			distributionAttrs["diskUsedBytes"] = distribution.DiskUsed
+			distributionAttrs["onHeapMemoryUsedBytes"] =
+				distribution.OnHeapMemoryUsed
+			distributionAttrs["onHeapMemoryFreeBytes"] =
+				distribution.OnHeapMemoryRemaining
+			distributionAttrs["offHeapMemoryUsedBytes"] =
+				distribution.OffHeapMemoryUsed
+			distributionAttrs["offHeapMemoryFreeBytes"] =
+				distribution.OffHeapMemoryRemaining
+
+			writer <- model.Event{
+				Timestamp:  Now().UnixMilli(),
+				Type:       "SparkRDDDistributionSample",
+				Attributes: distributionAttrs,
+			}
 		}
 
 		for _, partition := range rdd.Partitions {
-			rddPartitionAttrs := maps.Clone(attrs)
+			partitionAttrs := makeAppAttributesMap(sparkApp, tags)
 
-			rddPartitionAttrs["sparkAppRddPartitionBlockName"] =
-				partition.BlockName
+			if eventDecorator != nil {
+				eventDecorator.DecorateEvent(partitionAttrs)
+			}
 
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.partition.memory.used",
-				partition.MemoryUsed,
-				rddPartitionAttrs,
-				writer,
-			)
-			writeGauge(
-				metricPrefix,
-				"app.storage.rdd.partition.disk.used",
-				partition.DiskUsed,
-				rddPartitionAttrs,
-				writer,
-			)
+			partitionAttrs["rddId"] = rdd.Id
+			partitionAttrs["rddName"] = rdd.Name
+			partitionAttrs["blockName"] = partition.BlockName
+			partitionAttrs["storageLevel"] = partition.StorageLevel
+			partitionAttrs["memoryUsedBytes"] = partition.MemoryUsed
+			partitionAttrs["diskUsedBytes"] = partition.DiskUsed
+			partitionAttrs["executorIds"] =
+				strings.Join(partition.Executors, ",")
+
+			writer <- model.Event{
+                Timestamp:  Now().UnixMilli(),
+                Type:       "SparkRDDPartitionSample",
+                Attributes: partitionAttrs,
+            }
 		}
 	}
 
 	return nil
 }
 
-func writeMemoryMetrics(
-	metricPrefix string,
+func addMemoryMetrics(
 	memoryMetrics *SparkExecutorMemoryMetrics,
 	attrs map[string]interface{},
-	writer chan<- model.Metric,
 ) {
-	writeGauge(
-		metricPrefix,
-		"usedOnHeapStorage",
-		memoryMetrics.UsedOnHeapStorageMemory,
-		attrs,
-		writer,
-	)
-
-	writeGauge(
-		metricPrefix,
-		"usedOffHeapStorage",
-		memoryMetrics.UsedOffHeapStorageMemory,
-		attrs,
-		writer,
-	)
-
-	writeGauge(
-		metricPrefix,
-		"totalOnHeapStorage",
-		memoryMetrics.TotalOnHeapStorageMemory,
-		attrs,
-		writer,
-	)
-
-	writeGauge(
-		metricPrefix,
-		"totalOffHeapStorage",
-		memoryMetrics.TotalOffHeapStorageMemory,
-		attrs,
-		writer,
-	)
+	attrs["onHeapMemoryUsedBytes"] = memoryMetrics.UsedOnHeapStorageMemory
+	attrs["offHeapMemoryUsedBytes"] = memoryMetrics.UsedOffHeapStorageMemory
+	attrs["onHeapMemoryTotalBytes"] = memoryMetrics.TotalOnHeapStorageMemory
+	attrs["offHeapMemoryTotalBytes"] = memoryMetrics.TotalOffHeapStorageMemory
 }
 
-func writePeakMemoryMetrics(
-	metricPrefix string,
+func addPeakMemoryMetrics(
 	peakMemoryMetrics *SparkExecutorPeakMemoryMetrics,
 	attrs map[string]interface{},
-	writer chan<- model.Metric,
 ) {
-	writeGauge(
-		metricPrefix,
-		"jvmHeap",
-		peakMemoryMetrics.JVMHeapMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"jvmOffHeap",
-		peakMemoryMetrics.JVMOffHeapMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"onHeapExecution",
-		peakMemoryMetrics.OnHeapExecutionMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"offHeapExecution",
-		peakMemoryMetrics.OffHeapExecutionMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"onHeapStorage",
-		peakMemoryMetrics.OnHeapStorageMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"offHeapStorage",
-		peakMemoryMetrics.OffHeapStorageMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"onHeapUnified",
-		peakMemoryMetrics.OnHeapUnifiedMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"offHeapUnified",
-		peakMemoryMetrics.OffHeapUnifiedMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"directPool",
-		peakMemoryMetrics.DirectPoolMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"mappedPool",
-		peakMemoryMetrics.MappedPoolMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"nettyDirect",
-		peakMemoryMetrics.NettyDirectMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"jvmDirect",
-		peakMemoryMetrics.JvmDirectMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"sparkDirectMemoryOverLimit",
-		peakMemoryMetrics.SparkDirectMemoryOverLimit,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"totalOffHeap",
-		peakMemoryMetrics.TotalOffHeapMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreeJvmVirtual",
-		peakMemoryMetrics.ProcessTreeJVMVMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreeJvmRSS",
-		peakMemoryMetrics.ProcessTreeJVMRSSMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreePythonVirtual",
-		peakMemoryMetrics.ProcessTreePythonVMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreePythonRSS",
-		peakMemoryMetrics.ProcessTreePythonRSSMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreeOtherVirtual",
-		peakMemoryMetrics.ProcessTreeOtherVMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"processTreeOtherRSS",
-		peakMemoryMetrics.ProcessTreeOtherRSSMemory,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"minorGCCount",
-		peakMemoryMetrics.MinorGCCount,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"minorGCTime",
-		peakMemoryMetrics.MinorGCTime,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"majorGCCount",
-		peakMemoryMetrics.MajorGCCount,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"majorGCTime",
-		peakMemoryMetrics.MajorGCTime,
-		attrs,
-		writer,
-	)
-	writeGauge(
-		metricPrefix,
-		"totalGCTime",
-		peakMemoryMetrics.TotalGCTime,
-		attrs,
-		writer,
-	)
+	attrs["peakJvmHeapMemoryUsedBytes"] = peakMemoryMetrics.JVMHeapMemory
+	attrs["peakJvmOffHeapMemoryUsedBytes"] = peakMemoryMetrics.JVMOffHeapMemory
+	attrs["peakOnHeapExecutionMemoryUsedBytes"] =
+		peakMemoryMetrics.OnHeapExecutionMemory
+	attrs["peakOffHeapExecutionMemoryUsedBytes"] =
+		peakMemoryMetrics.OffHeapExecutionMemory
+	attrs["peakOnHeapStorageMemoryUsedBytes"] =
+		peakMemoryMetrics.OnHeapStorageMemory
+	attrs["peakOffHeapStorageMemoryUsedBytes"] =
+		peakMemoryMetrics.OffHeapStorageMemory
+	attrs["peakOnHeapUnifiedMemoryUsedBytes"] =
+		peakMemoryMetrics.OnHeapUnifiedMemory
+	attrs["peakOffHeapUnifiedMemoryUsedBytes"] =
+		peakMemoryMetrics.OffHeapUnifiedMemory
+	attrs["peakDirectPoolMemoryUsedBytes"] = peakMemoryMetrics.DirectPoolMemory
+	attrs["peakMappedPoolMemoryUsedBytes"] = peakMemoryMetrics.MappedPoolMemory
+	attrs["peakProcessTreeJvmVirtualBytes"] =
+		peakMemoryMetrics.ProcessTreeJVMVMemory
+	attrs["peakProcessTreeJvmRSS"] = peakMemoryMetrics.ProcessTreeJVMRSSMemory
+	attrs["peakProcessTreePythonVirtualBytes"] =
+		peakMemoryMetrics.ProcessTreePythonVMemory
+	attrs["peakProcessTreePythonRSS"] =
+		peakMemoryMetrics.ProcessTreePythonRSSMemory
+	attrs["peakProcessTreeOtherVirtualBytes"] =
+		peakMemoryMetrics.ProcessTreeOtherVMemory
+	attrs["peakProcessTreeOtherRSS"] =
+		peakMemoryMetrics.ProcessTreeOtherRSSMemory
+	attrs["peakMinorGCCount"] = peakMemoryMetrics.MinorGCCount
+	attrs["peakMinorGCDuration"] = peakMemoryMetrics.MinorGCTime
+	attrs["peakMajorGCCount"] = peakMemoryMetrics.MajorGCCount
+	attrs["peakMajorGCDuration"] = peakMemoryMetrics.MajorGCTime
+	attrs["peakTotalGCDuration"] = peakMemoryMetrics.TotalGCTime
+
+	// The next 4 are Databricks only attributes, not present in the regular
+	// Spark metrics. I don't know what they are for, whether used or free or
+	// total or bytes or something else so I'm leaving the names as the same
+	// as we get them in the API call.
+	attrs["peakNettyDirectMemory"] = peakMemoryMetrics.NettyDirectMemory
+	attrs["peakJvmDirectMemory"] = peakMemoryMetrics.JvmDirectMemory
+	attrs["peakSparkDirectMemoryOverLimit"] =
+		peakMemoryMetrics.SparkDirectMemoryOverLimit
+	attrs["peakTotalOffHeapMemory"] = peakMemoryMetrics.TotalOffHeapMemory
 }
 
-func writeGauge(
-	prefix string,
-	metricName string,
-	metricValue any,
-	attrs map[string]interface{},
-	writer chan<- model.Metric,
-) {
-	metric := model.NewGaugeMetric(
-		prefix + metricName,
-		model.MakeNumeric(metricValue),
-		time.Now(),
-	)
-
-	for k, v := range attrs {
-		metric.Attributes[k] = v
+// Skipped stages don't have submission time, first task launched time, or
+// completion time on them so we can't use those to tell if we've already
+// recorded the skipped stage or if this stage was skipped since the last run.
+// To compensate, we keep track of the completed jobs we've seen since the last
+// run and when collecting stage metrics, if we see a skipped stage that is
+// part of a job that completed since the last run, we report a complete event
+// (but no start event) for the skipped stage. Using this logic, we will only
+// record skipped stages once since we only record completed jobs once.
+func shouldReportSkippedStage(
+	completedJobs []SparkJob,
+	stage *SparkStage,
+) bool {
+	// See if the stage is part of a completed job
+	for _, job := range completedJobs {
+		for _, stageId := range job.StageIds {
+			if stageId == stage.StageId {
+				return true
+			}
+		}
 	}
 
-	writer <- metric
+	return false
 }
 
 func makeAppAttributesMap(

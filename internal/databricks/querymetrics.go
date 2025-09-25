@@ -126,6 +126,7 @@ func (d *DatabricksQueryMetricsReceiver) PollEvents(
 			// anything to be captured on the first run.
 			processQuery(
 				ctx,
+				d.w,
 				&query,
 				d.includeIdentityMetadata,
 				effectiveLastRunMs,
@@ -147,6 +148,7 @@ func (d *DatabricksQueryMetricsReceiver) PollEvents(
 
 func processQuery(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	query *databricksSdkSql.QueryInfo,
 	includeIdentityMetadata bool,
 	windowStartMs int64,
@@ -204,6 +206,7 @@ func processQuery(
 			Timestamp: time.Now().UnixMilli(),
 			Attributes: makeQueryEventAttrs(
 				ctx,
+				w,
 				query,
 				includeIdentityMetadata,
 				tags,
@@ -230,6 +233,7 @@ func processQuery(
 
 func makeQueryEventAttrs(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	query *databricksSdkSql.QueryInfo,
 	includeIdentityMetadata bool,
 	tags map[string]string,
@@ -241,7 +245,7 @@ func makeQueryEventAttrs(
 	attrs["status"] = query.Status
 	attrs["warehouseId"] = query.WarehouseId
 
-	warehouseInfo, err := getWarehouseInfoById(ctx, query.WarehouseId)
+	warehouseInfo, err := GetWarehouseInfoById(ctx, w, query.WarehouseId)
 	if err != nil {
 		log.Warnf(
 			"could not resolve warehouse ID %s to warehouse info while processing result for query %s: %s",
@@ -259,13 +263,13 @@ func makeQueryEventAttrs(
 		// @TODO remove else here by adding a function to decorate tags
 		// directly with an early return if err != nil. Maybe in cache.go after
 		// it is refactored?
-		attrs["warehouseName"] = warehouseInfo.name
+		attrs["warehouseName"] = warehouseInfo.Name
 		if includeIdentityMetadata {
-			attrs["warehouseCreator"] = warehouseInfo.creator
+			attrs["warehouseCreator"] = warehouseInfo.Creator
 		}
 	}
 
-	workspaceInfo, err := GetWorkspaceInfo(ctx)
+	workspaceInfo, err := GetWorkspaceInfo(ctx, w)
 	if err != nil {
 		log.Warnf(
 			"could not resolve workspace info while processing result for query %s: %s",

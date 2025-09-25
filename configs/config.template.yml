@@ -30,9 +30,6 @@ databricks:
   jobs:
     runs:
       enabled: true
-      metricPrefix: databricks.
-      includeIdentityMetadata: false
-      includeRunId: false
       startOffset: 86400
   pipelines:
     metrics:
@@ -53,12 +50,7 @@ databricks:
 
 spark:
   webUiUrl: http://localhost:4040
-  metricPrefix: spark.
   clusterManager: databricks
-  databricks:
-    includeJobRunTaskRunId: false
-    includePipelineUpdateId: false
-    includePipelineFlowId: false
 tags:
   key1: value
   key2: value

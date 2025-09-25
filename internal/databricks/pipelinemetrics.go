@@ -2,7 +2,6 @@ package databricks
 
 import (
 	"context"
-	"maps"
 	"strings"
 	"time"
 
@@ -24,61 +23,51 @@ func (s Set[T]) Add(u T) {
 }
 
 type eventData struct {
-	pipelineId string
+	pipelineId   string
 	pipelineName string
-	clusterId string
-	updateId string
+	clusterId    string
+	updateId     string
 }
 
 const (
 	FlowInfoStatusCompleted = "COMPLETED"
-	FlowInfoStatusExcluded = "EXCLUDED"
-	FlowInfoStatusFailed = "FAILED"
-	FlowInfoStatusIdle = "IDLE"
-	FlowInfoStatusPlanning = "PLANNING"
-	FlowInfoStatusQueued = "QUEUED"
-	FlowInfoStatusRunning = "RUNNING"
-	FlowInfoStatusSkipped = "SKIPPED"
-	FlowInfoStatusStarting = "STARTING"
-	FlowInfoStatusStopped = "STOPPED"
+	FlowInfoStatusExcluded  = "EXCLUDED"
+	FlowInfoStatusFailed    = "FAILED"
+	FlowInfoStatusIdle      = "IDLE"
+	FlowInfoStatusPlanning  = "PLANNING"
+	FlowInfoStatusQueued    = "QUEUED"
+	FlowInfoStatusRunning   = "RUNNING"
+	FlowInfoStatusSkipped   = "SKIPPED"
+	FlowInfoStatusStarting  = "STARTING"
+	FlowInfoStatusStopped   = "STOPPED"
 )
-
-func isFlowTerminated(status string) bool {
-	// We assume the status has already been uppercased. Since this is an
-	// internal function and we guarantee this in the caller, this is OK.
-	return status == FlowInfoStatusCompleted ||
-		status == FlowInfoStatusStopped ||
-		status == FlowInfoStatusSkipped ||
-		status == FlowInfoStatusFailed ||
-		status == FlowInfoStatusExcluded
-}
 
 type flowData struct {
 	eventData
 
-	id string
-	name string
-	queuedTime time.Time
-	planningTime time.Time
-	startTime time.Time
+	id             string
+	name           string
+	queueStartTime time.Time
+	planStartTime  time.Time
+	startTime      time.Time
 	completionTime time.Time
-	status string
-	backlogBytes *float64
-	backlogFiles *float64
-	numOutputRows *float64
+	status         string
+	backlogBytes   *float64
+	backlogFiles   *float64
+	numOutputRows  *float64
 	droppedRecords *float64
-	expectations []FlowProgressExpectations
+	expectations   []FlowProgressExpectations
 }
 
 func newFlowData(origin *databricksSdkPipelines.Origin) *flowData {
 	return &flowData{
 		eventData: eventData{
-			pipelineId: origin.PipelineId,
+			pipelineId:   origin.PipelineId,
 			pipelineName: origin.PipelineName,
-			clusterId: origin.ClusterId,
-			updateId: origin.UpdateId,
+			clusterId:    origin.ClusterId,
+			updateId:     origin.UpdateId,
 		},
-		id: origin.FlowId,
+		id:   origin.FlowId,
 		name: origin.FlowName,
 	}
 }
@@ -87,15 +76,44 @@ func getOrCreateFlowData(
 	flows map[string]*flowData,
 	flowProgress *FlowProgressDetails,
 	origin *databricksSdkPipelines.Origin,
+	updateId string,
+	queueStartTime time.Time,
+	planStartTime time.Time,
+	startTime time.Time,
 	completionTime time.Time,
+	status string,
 ) *flowData {
 	// OK to use flow name here instead of flow ID because flow names are unique
 	// within a pipeline.
 	// see: https://docs.databricks.com/aws/en/delta-live-tables/flows
 	// Also not all flow_process events have an ID in the origin!
-	flow, ok := flows[origin.FlowName]
+	flow, ok := flows[flowName(updateId, origin.FlowName)]
 	if !ok {
 		flow = newFlowData(origin)
+	}
+
+	if !queueStartTime.IsZero() {
+		flow.queueStartTime = queueStartTime
+	}
+
+	if !planStartTime.IsZero() {
+		flow.planStartTime = planStartTime
+	}
+
+	if !startTime.IsZero() {
+		flow.startTime = startTime
+	}
+
+	if !completionTime.IsZero() {
+		flow.completionTime = completionTime
+	}
+
+	// If we have not yet seen a state for this flow, save the state from the
+	// current event as the current state of the flow. This logic depends on
+	// seeing the latest event first which is technically guaranteed by the API
+	// (events are returned in descending order by timestamp).
+	if flow.status == "" {
+		flow.status = status
 	}
 
 	// Only look for the additional metrics on the log event if the flow has
@@ -108,6 +126,9 @@ func getOrCreateFlowData(
 	// flow because some of the metrics are on the COMPLETED log event and the
 	// completionTime on the flow is not set until after this function is
 	// called.
+	//
+	// @TODO: I believe the second completionTime check is no longer needed now
+	// that we set the flow's completion time above.
 	if !flow.completionTime.IsZero() || !completionTime.IsZero() {
 		processFlowData(flowProgress, flow)
 	}
@@ -139,29 +160,52 @@ func processFlowData(
 	}
 }
 
-func isUpdateTerminated(state databricksSdkPipelines.UpdateInfoState) bool {
-	return state == databricksSdkPipelines.UpdateInfoStateCompleted ||
-		state == databricksSdkPipelines.UpdateInfoStateCanceled ||
-		state == databricksSdkPipelines.UpdateInfoStateFailed
+func isFlowTerminated(status string) bool {
+	// We assume the status has already been uppercased. Since this is an
+	// internal function and we guarantee this in the caller, this is OK.
+	return status == FlowInfoStatusCompleted ||
+		status == FlowInfoStatusStopped ||
+		status == FlowInfoStatusSkipped ||
+		status == FlowInfoStatusFailed ||
+		status == FlowInfoStatusExcluded
+}
+
+// This method is used to return the unique name of a flow within a given
+// update. This is done by prefixing the flow name with the update ID. This is
+// necessary when looking up flows in the oldFlows set to determine if a given
+// flow is one that already terminated. This could be done without having to
+// prefix the flow name by using a map[string]Set[string] instead. But this has
+// two issues. First, in order to lookup a flow in the oldFlows set, we have to
+// first lookup the right set by update ID and if no set exists for an update
+// ID, do we consider that an error or consider that the flow is not an old
+// flow? And once all updates are processed, this should really never be the
+// case but we would probably want to check it anyway just to be safe. Second,
+// it means that when we add a flow to the oldFlows set, we have to first check
+// if the set for that update exists and that has to be done on every insert.
+// Rather than do all that, although the string concatenation does incur
+// additional performance overhead, it isn't much and makes the code simpler
+// and easier to understand.
+func flowName(updateId string, flowName string) string {
+	return updateId + "." + flowName
 }
 
 type updateData struct {
 	eventData
 
-	startTime time.Time
-	waitingTime time.Time
-	startRunTime time.Time
+	creationTime   time.Time
+	waitStartTime  time.Time
+	startTime      time.Time
 	completionTime time.Time
-	state databricksSdkPipelines.UpdateInfoState
+	state          databricksSdkPipelines.UpdateInfoState
 }
 
 func newUpdateData(origin *databricksSdkPipelines.Origin) *updateData {
 	return &updateData{
 		eventData: eventData{
-			pipelineId: origin.PipelineId,
+			pipelineId:   origin.PipelineId,
 			pipelineName: origin.PipelineName,
-			clusterId: origin.ClusterId,
-			updateId: origin.UpdateId,
+			clusterId:    origin.ClusterId,
+			updateId:     origin.UpdateId,
 		},
 	}
 }
@@ -178,90 +222,129 @@ func getOrCreateUpdateData(
 	return newUpdateData(origin)
 }
 
+// We need a separate function to create update data for update_progress events
+// than for create_update events since create_update events do not have a status
+// and so none of the time fields are set so there is no need to perform the
+// same checks as we do for update_progress events.
+func getOrCreateUpdateDataForUpdateProgress(
+	updates map[string]*updateData,
+	origin *databricksSdkPipelines.Origin,
+	waitStartTime time.Time,
+	startTime time.Time,
+	completionTime time.Time,
+	state databricksSdkPipelines.UpdateInfoState,
+) *updateData {
+	update := getOrCreateUpdateData(updates, origin)
+
+	if !waitStartTime.IsZero() {
+		update.waitStartTime = waitStartTime
+	}
+
+	if !startTime.IsZero() {
+		update.startTime = startTime
+	}
+
+	if !completionTime.IsZero() {
+		update.completionTime = completionTime
+	}
+
+	// If we have not yet seen a state for this update, save the state from the
+	// current event as the current state of the update. This logic depends on
+	// seeing the latest event first which is technically guaranteed by the API
+	// (events are returned in descending order by timestamp).
+	if update.state == "" {
+		update.state = state
+	}
+
+	return update
+}
+
+func isUpdateTerminated(state databricksSdkPipelines.UpdateInfoState) bool {
+	return state == databricksSdkPipelines.UpdateInfoStateCompleted ||
+		state == databricksSdkPipelines.UpdateInfoStateCanceled ||
+		state == databricksSdkPipelines.UpdateInfoStateFailed
+}
+
+func isTargetEventType(eventType string) bool {
+	return eventType == "create_update" ||
+		eventType == "update_progress" ||
+		eventType == "flow_progress"
+}
+
 // see https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/model.go#L1182
 type pipelineCounters struct {
-	deleted 		int64
-	deploying		int64
-	failed			int64
-	idle			int64
-	recovering		int64
-	resetting		int64
-	running 		int64
-	starting 		int64
-	stopping 		int64
+	deleted    int64
+	deploying  int64
+	failed     int64
+	idle       int64
+	recovering int64
+	resetting  int64
+	running    int64
+	starting   int64
+	stopping   int64
 }
 
 // see https://github.com/databricks/databricks-sdk-go/blob/v0.52.0/service/pipelines/model.go#L1715
+// Terminated states are not tracked because they can be counted using count(*)
+// on DatabricksPipelineUpdate complete events
 type updateCounters struct {
-	canceled				int64
-	completed				int64
-	created					int64
-	failed					int64
-	initializing			int64
-	queued					int64
-	resetting				int64
-	running					int64
-	settingUpTables			int64
-	stopping				int64
-	waitingForResources		int64
+	created             int64
+	initializing        int64
+	queued              int64
+	resetting           int64
+	running             int64
+	settingUpTables     int64
+	stopping            int64
+	waitingForResources int64
 }
 
 // determined valid states by looking at pipeline log flow_progress events and
 // looking at the status dropdown in the list view for a pipeline in the
 // Pipelines UI
+// Terminated states are not tracked because they can be counted using count(*)
+// on DatabricksPipelineFlow complete events
 type flowCounters struct {
-	completed		int64
-	excluded		int64
-	failed			int64
-	idle			int64
-	planning		int64
-	queued			int64
-	running			int64
-	skipped			int64
-	starting		int64
-	stopped			int64
+	idle      int64
+	planning  int64
+	queued    int64
+	running   int64
+	starting  int64
 }
 
 type DatabricksPipelineMetricsReceiver struct {
-	i							*integration.LabsIntegration
-	w							DatabricksWorkspace
-	metricPrefix				string
-	startOffset					time.Duration
-	intervalOffset				time.Duration
-	includeUpdateId				bool
-	tags 						map[string]string
-	lastRun						time.Time
+	i               *integration.LabsIntegration
+	w               DatabricksWorkspace
+	startOffset     time.Duration
+	intervalOffset  time.Duration
+	tags            map[string]string
+	lastRun         time.Time
 }
 
 func NewDatabricksPipelineMetricsReceiver(
 	i *integration.LabsIntegration,
 	w DatabricksWorkspace,
-	metricPrefix string,
 	startOffset time.Duration,
 	intervalOffset time.Duration,
-	includeUpdateId bool,
 	tags map[string]string,
-) (*DatabricksPipelineMetricsReceiver, error) {
+) *DatabricksPipelineMetricsReceiver {
 	return &DatabricksPipelineMetricsReceiver{
 		i,
 		w,
-		metricPrefix,
 		startOffset,
 		intervalOffset,
-		includeUpdateId,
 		tags,
 		// lastRun is initialized to now minus the collection interval
-		time.Now().Add(-i.Interval * time.Second),
-	}, nil
+		Now().UTC().Add(-i.Interval * time.Second),
+	}
 }
 
 func (d *DatabricksPipelineMetricsReceiver) GetId() string {
 	return "databricks-pipeline-metrics-receiver"
 }
 
-func (d *DatabricksPipelineMetricsReceiver) PollMetrics(
+func (d *DatabricksPipelineMetricsReceiver) PollEvents(
 	ctx context.Context,
-	writer chan <- model.Metric,
+	writer chan<- model.Event,
 ) error {
 	lastRun := d.lastRun
 
@@ -269,7 +352,7 @@ func (d *DatabricksPipelineMetricsReceiver) PollMetrics(
 	// that stays running since it requires state to be maintained. However,
 	// this is the only supported way to run the integration. If this ever
 	// changes, this approach to saving the last run time needs to be reviewed.
-	d.lastRun = time.Now()
+	d.lastRun = Now().UTC()
 
 	log.Debugf("listing pipelines...")
 	defer log.Debugf("done listing pipelines")
@@ -280,7 +363,7 @@ func (d *DatabricksPipelineMetricsReceiver) PollMetrics(
 
 	all := d.w.ListPipelines(ctx)
 
-	for ; all.HasNext(ctx);  {
+	for all.HasNext(ctx) {
 		pipelineStateInfo, err := all.Next(ctx)
 		if err != nil {
 			return err
@@ -298,26 +381,23 @@ func (d *DatabricksPipelineMetricsReceiver) PollMetrics(
 		)
 	}
 
-	writePipelineCounters(
-		d.metricPrefix,
+	attrs, err := makePipelineSummaryAttributes(
+		ctx,
+		d.w,
 		&pipelineCounters,
-		d.tags,
-		writer,
-	)
-
-	writeUpdateCounters(
-		d.metricPrefix,
 		&updateCounters,
-		d.tags,
-		writer,
-	)
-
-	writeFlowCounters(
-		d.metricPrefix,
 		&flowCounters,
 		d.tags,
-		writer,
 	)
+	if err != nil {
+		return err
+	}
+
+	writer <- model.Event{
+		Type:       "DatabricksPipelineSummary",
+		Timestamp:  Now().UnixMilli(),
+		Attributes: attrs,
+	}
 
 	return nil
 }
@@ -328,7 +408,7 @@ func (d *DatabricksPipelineMetricsReceiver) processPipelineEvents(
 	lastRun time.Time,
 	updateCounters *updateCounters,
 	flowCounters *flowCounters,
-	writer chan <- model.Metric,
+	writer chan<- model.Event,
 ) {
 	log.Debugf(
 		"processing pipeline events for pipeline %s (%s) with state %s",
@@ -393,7 +473,7 @@ func (d *DatabricksPipelineMetricsReceiver) processPipelineEvents(
 		)
 	}
 
-	for ; allEvents.HasNext(ctx);  {
+	for allEvents.HasNext(ctx) {
 		pipelineEvent, err := allEvents.Next(ctx)
 		if err != nil {
 			log.Warnf(
@@ -405,97 +485,22 @@ func (d *DatabricksPipelineMetricsReceiver) processPipelineEvents(
 			return
 		}
 
-		eventType := pipelineEvent.EventType
+		eventType := strings.ToLower(pipelineEvent.EventType)
 
-		// Short circuit early if this is not an event type we care about.
-		if eventType != "create_update" &&
-			eventType != "update_progress" &&
-			eventType != "flow_progress" {
-			continue
-		}
-
-		// There isn't much we can do without an origin since the origin
-		// data is used to decorate the metrics with things like update ID,
-		// flow name, flow ID, and so on.
-		if pipelineEvent.Origin == nil {
-			log.Warnf(
-				"ignoring event with type %s with ID %s for pipeline %s (%s) since it has no origin data",
-				eventType,
-				pipelineEvent.Id,
-				pipelineStateInfo.Name,
-				pipelineStateInfo.PipelineId,
-			)
+		eventTimestamp, ok := shouldProcessEvent(
+			&pipelineEvent,
+			&pipelineStateInfo,
+			eventType,
+			endTime,
+			oldUpdates,
+		)
+		if !ok {
 			continue
 		}
 
 		origin := pipelineEvent.Origin
-
-		// There isn't much we can do without details either since all the
-		// data we need to record the metrics is in the details.
-		if pipelineEvent.Details == nil {
-			log.Warnf(
-				"ignoring event with type %s with ID %s for update %s for pipeline %s (%s) since it has no details data",
-				eventType,
-				pipelineEvent.Id,
-				origin.UpdateId,
-				pipelineStateInfo.Name,
-				pipelineStateInfo.PipelineId,
-			)
-			continue
-		}
-
-		// Parse the event timestamp.
-		eventTimestamp, err := time.Parse(
-			RFC_3339_MILLI_LAYOUT,
-			pipelineEvent.Timestamp,
-		)
-		if err != nil {
-			log.Warnf(
-				"ignoring event with type %s with ID %s with invalid timestamp %s for update %s for pipeline %s (%s): %v",
-				eventType,
-				pipelineEvent.Id,
-				pipelineEvent.Timestamp,
-				origin.UpdateId,
-				pipelineStateInfo.Name,
-				pipelineStateInfo.PipelineId,
-				err,
-			)
-			continue
-		}
-
-		if eventTimestamp.After(endTime) {
-			log.Warnf(
-				"ignoring event with type %s with ID %s with timestamp %s for update %s for pipeline %s (%s) since it occurred after the calculated end time",
-				eventType,
-				pipelineEvent.Id,
-				pipelineEvent.Timestamp,
-				origin.UpdateId,
-				pipelineStateInfo.Name,
-				pipelineStateInfo.PipelineId,
-			)
-			continue
-		}
-
-		details := pipelineEvent.Details
 		updateId := origin.UpdateId
-
-		if oldUpdates.IsMember(updateId) {
-			// Ignore this update progress event because it is associated with
-			// an update that completed before the last run.
-			if log.IsDebugEnabled() {
-				log.Debugf(
-					"ignoring event with type %s with ID %s with timestamp %s for update %s for pipeline %s (%s) because the update already terminated",
-					eventType,
-					pipelineEvent.Id,
-					pipelineEvent.Timestamp,
-					updateId,
-					pipelineStateInfo.Name,
-					pipelineStateInfo.PipelineId,
-				)
-			}
-
-			continue
-		}
+		details := pipelineEvent.Details
 
 		if eventType == "create_update" {
 			update := processCreateUpdate(
@@ -540,32 +545,131 @@ func (d *DatabricksPipelineMetricsReceiver) processPipelineEvents(
 			)
 
 			if flow != nil {
-				flows[origin.FlowName] = flow
+				flows[flowName(updateId, origin.FlowName)] = flow
 			}
 		}
 	}
 
-	writeUpdateMetrics(
-		d.metricPrefix,
+	addUpdates(
+		ctx,
+		d.w,
 		updates,
 		oldUpdates,
-		d.includeUpdateId,
+		effectiveLastRun,
 		d.tags,
 		writer,
 	)
 
 	updateUpdateCounters(updates, updateCounters)
 
-	writeFlowMetrics(
-		d.metricPrefix,
+	addFlows(
+		ctx,
+		d.w,
 		flows,
 		oldFlows,
-		d.includeUpdateId,
+		effectiveLastRun,
 		d.tags,
 		writer,
 	)
 
 	updateFlowCounters(flows, flowCounters)
+}
+
+func shouldProcessEvent(
+	pipelineEvent *PipelineEvent,
+	pipelineStateInfo *databricksSdkPipelines.PipelineStateInfo,
+	eventType string,
+	endTime time.Time,
+	oldUpdates Set[string],
+) (time.Time, bool) {
+	// Short circuit early if this is not an event type we care about.
+	if !isTargetEventType(eventType) {
+		return time.Time{}, false
+	}
+
+	// There isn't much we can do without an origin since the origin
+	// data is used to decorate the metrics with things like update ID,
+	// flow name, flow ID, and so on.
+	if pipelineEvent.Origin == nil {
+		log.Warnf(
+			"ignoring event with type %s with ID %s for pipeline %s (%s) since it has no origin data",
+			eventType,
+			pipelineEvent.Id,
+			pipelineStateInfo.Name,
+			pipelineStateInfo.PipelineId,
+		)
+		return time.Time{}, false
+	}
+
+	origin := pipelineEvent.Origin
+
+	// There isn't much we can do without details either since all the
+	// data we need to record the metrics is in the details.
+	if pipelineEvent.Details == nil {
+		log.Warnf(
+			"ignoring event with type %s with ID %s for update %s for pipeline %s (%s) since it has no details data",
+			eventType,
+			pipelineEvent.Id,
+			origin.UpdateId,
+			pipelineStateInfo.Name,
+			pipelineStateInfo.PipelineId,
+		)
+		return time.Time{}, false
+	}
+
+	// Parse the event timestamp.
+	eventTimestamp, err := time.Parse(
+		RFC_3339_MILLI_LAYOUT,
+		pipelineEvent.Timestamp,
+	)
+	if err != nil {
+		log.Warnf(
+			"ignoring event with type %s with ID %s with invalid timestamp %s for update %s for pipeline %s (%s): %v",
+			eventType,
+			pipelineEvent.Id,
+			pipelineEvent.Timestamp,
+			origin.UpdateId,
+			pipelineStateInfo.Name,
+			pipelineStateInfo.PipelineId,
+			err,
+		)
+		return time.Time{}, false
+	}
+
+	if eventTimestamp.After(endTime) {
+		log.Warnf(
+			"ignoring event with type %s with ID %s with timestamp %s for update %s for pipeline %s (%s) since it occurred after the calculated end time",
+			eventType,
+			pipelineEvent.Id,
+			pipelineEvent.Timestamp,
+			origin.UpdateId,
+			pipelineStateInfo.Name,
+			pipelineStateInfo.PipelineId,
+		)
+		return time.Time{}, false
+	}
+
+	updateId := origin.UpdateId
+
+	if oldUpdates.IsMember(updateId) {
+		// Ignore this update progress event because it is associated with
+		// an update that completed before the last run.
+		if log.IsDebugEnabled() {
+			log.Debugf(
+				"ignoring event with type %s with ID %s with timestamp %s for update %s for pipeline %s (%s) because the update already terminated",
+				eventType,
+				pipelineEvent.Id,
+				pipelineEvent.Timestamp,
+				updateId,
+				pipelineStateInfo.Name,
+				pipelineStateInfo.PipelineId,
+			)
+		}
+
+		return time.Time{}, false
+	}
+
+	return eventTimestamp, true
 }
 
 func processCreateUpdate(
@@ -574,7 +678,7 @@ func processCreateUpdate(
 	updateId string,
 	eventTimestamp time.Time,
 	updates map[string]*updateData,
-) (*updateData) {
+) *updateData {
 	if log.IsDebugEnabled() {
 		log.Debugf(
 			"processing create_update event at time %s for update %s",
@@ -585,7 +689,7 @@ func processCreateUpdate(
 
 	update := getOrCreateUpdateData(updates, origin)
 
-	update.startTime = eventTimestamp
+	update.creationTime = eventTimestamp
 
 	return update
 }
@@ -599,13 +703,13 @@ func processUpdate(
 	lastRun time.Time,
 	updates map[string]*updateData,
 	oldUpdates Set[string],
-) (*updateData) {
+) *updateData {
 	state := updateProgress.State
 
 	var (
-		waitingTime time.Time
-		startRunTime time.Time
-		completionTime time.Time
+		waitStartTime    time.Time
+		startTime        time.Time
+		completionTime   time.Time
 	)
 
 	if isUpdateTerminated(state) {
@@ -633,12 +737,12 @@ func processUpdate(
 		completionTime = eventTimestamp
 	} else if state ==
 		databricksSdkPipelines.UpdateInfoStateWaitingForResources {
-		waitingTime = eventTimestamp
+		waitStartTime = eventTimestamp
 	} else if state == databricksSdkPipelines.UpdateInfoStateInitializing {
 		// The Databricks update details UI tracks the overall update duration
 		// and the update "Run time" separately. It starts tracking the run
 		// time when the update INITIALIZING event is emitted.
-		startRunTime = eventTimestamp
+		startTime = eventTimestamp
 	}
 
 	if log.IsDebugEnabled() {
@@ -650,29 +754,14 @@ func processUpdate(
 		)
 	}
 
-	update := getOrCreateUpdateData(updates, origin)
-
-	if !completionTime.IsZero() {
-		update.completionTime = completionTime
-	}
-
-	if !waitingTime.IsZero() {
-		update.waitingTime = waitingTime
-	}
-
-	if !startRunTime.IsZero() {
-		update.startRunTime = startRunTime
-	}
-
-	// If we have not yet seen a state for this update, save the state from the
-	// current event as the current state of the update. This logic depends on
-	// seeing the latest event first which is technically guaranteed by the API
-	// (events are returned in descending order by timestamp).
-	if update.state == "" {
-		update.state = state
-	}
-
-	return update
+	return getOrCreateUpdateDataForUpdateProgress(
+		updates,
+		origin,
+		waitStartTime,
+		startTime,
+		completionTime,
+		state,
+	)
 }
 
 func processFlow(
@@ -685,7 +774,7 @@ func processFlow(
 	flows map[string]*flowData,
 	oldFlows Set[string],
 ) *flowData {
-	if oldFlows.IsMember(origin.FlowName) {
+	if oldFlows.IsMember(flowName(origin.UpdateId, origin.FlowName)) {
 		// Ignore this flow progress event because it is associated with a flow
 		// that completed before the last run.
 		if log.IsDebugEnabled() {
@@ -703,10 +792,10 @@ func processFlow(
 	status := strings.ToUpper(flowProgress.Status)
 
 	var (
-		queuedTime time.Time
-		planningTime time.Time
-		startTime time.Time
-		completionTime time.Time
+		queueStartTime     time.Time
+		planStartTime      time.Time
+		startTime          time.Time
+		completionTime     time.Time
 	)
 
 	if isFlowTerminated(status) {
@@ -729,15 +818,15 @@ func processFlow(
 				)
 			}
 
-			oldFlows.Add(origin.FlowName)
+			oldFlows.Add(flowName(origin.UpdateId, origin.FlowName))
 			return nil
 		}
 
 		completionTime = eventTimestamp
 	} else if status == FlowInfoStatusQueued {
-		queuedTime = eventTimestamp
+		queueStartTime = eventTimestamp
 	} else if status == FlowInfoStatusPlanning {
-		planningTime = eventTimestamp
+		planStartTime = eventTimestamp
 	} else if status == FlowInfoStatusStarting {
 		startTime = eventTimestamp
 	}
@@ -753,33 +842,17 @@ func processFlow(
 		)
 	}
 
-	flow := getOrCreateFlowData(flows, flowProgress, origin, completionTime)
-
-	if !completionTime.IsZero() {
-		flow.completionTime = completionTime
-	}
-
-	if !queuedTime.IsZero() {
-		flow.queuedTime = queuedTime
-	}
-
-	if !planningTime.IsZero() {
-		flow.planningTime = planningTime
-	}
-
-	if !startTime.IsZero() {
-		flow.startTime = startTime
-	}
-
-	// If we have not yet seen a state for this flow, save the state from the
-	// current event as the current state of the flow. This logic depends on
-	// seeing the latest event first which is technically guaranteed by the API
-	// (events are returned in descending order by timestamp).
-	if flow.status == "" {
-		flow.status = status
-	}
-
-	return flow
+	return getOrCreateFlowData(
+		flows,
+		flowProgress,
+		origin,
+		updateId,
+		queueStartTime,
+		planStartTime,
+		startTime,
+		completionTime,
+		status,
+	)
 }
 
 func updatePipelineCounters(
@@ -818,15 +891,10 @@ func updateUpdateCounters(
 	for _, update := range updates {
 		state := update.state
 
-		if state == databricksSdkPipelines.UpdateInfoStateCanceled {
-			counters.canceled += 1
-		} else if state == databricksSdkPipelines.UpdateInfoStateCompleted {
-			counters.completed += 1
-		} else if state == databricksSdkPipelines.UpdateInfoStateCreated {
-			// @TODO do we want to know total created or created since last run?
+		if state == databricksSdkPipelines.UpdateInfoStateCreated {
+			// Technically we never see this state because it is not on the
+			// create_update event
 			counters.created += 1
-		} else if state == databricksSdkPipelines.UpdateInfoStateFailed {
-			counters.failed += 1
 		} else if state == databricksSdkPipelines.UpdateInfoStateInitializing {
 			counters.initializing += 1
 		} else if state == databricksSdkPipelines.UpdateInfoStateQueued {
@@ -856,13 +924,7 @@ func updateFlowCounters(
 		// was set into the flow.
 		status := flow.status
 
-		if status == FlowInfoStatusCompleted {
-			counters.completed += 1
-		} else if status == FlowInfoStatusExcluded {
-			counters.excluded += 1
-		} else if status == FlowInfoStatusFailed {
-			counters.failed += 1
-		} else if status == FlowInfoStatusIdle {
+		if status == FlowInfoStatusIdle {
 			counters.idle += 1
 		} else if status == FlowInfoStatusPlanning {
 			counters.planning += 1
@@ -870,42 +932,470 @@ func updateFlowCounters(
 			counters.queued += 1
 		} else if status == FlowInfoStatusRunning {
 			counters.running += 1
-		} else if status == FlowInfoStatusSkipped {
-			counters.skipped += 1
-		} else if status == FlowInfoStatusStarting {
+		}else if status == FlowInfoStatusStarting {
 			counters.starting += 1
-		} else if status == FlowInfoStatusStopped {
-			counters.stopped += 1
 		}
 	}
 }
 
-func makeEventAttrs(
-	event *eventData,
-	includeUpdateId bool,
+func makePipelineBaseAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	eventData *eventData,
 	tags map[string]string,
-) map[string]interface{} {
+) (map[string]interface{}, error) {
 	attrs := makeAttributesMap(tags)
 
-	attrs["databricksPipelineId"] = event.pipelineId
-	attrs["databricksPipelineName"] = event.pipelineName
-	attrs["databricksClusterId"] = event.clusterId
-
-	if includeUpdateId {
-		attrs["databricksPipelineUpdateId"] = event.updateId
+	workspaceInfo, err := GetWorkspaceInfo(ctx, w)
+	if err != nil {
+		return nil, err
 	}
 
-	return attrs
+	// We store most of the attributes in this function using the databricks*
+	// convention to enable facet linking from Spark metrics or other metrics
+	// which use the databricks* naming convention.
+
+	attrs["databricksWorkspaceId"] = workspaceInfo.Id
+	attrs["databricksWorkspaceName"] = workspaceInfo.InstanceName
+	attrs["databricksWorkspaceUrl"] = workspaceInfo.Url
+
+	if eventData == nil {
+		return attrs, nil
+	}
+
+	if eventData.clusterId != "" {
+		clusterInfo, err := GetClusterInfoById(
+			ctx,
+			w,
+			eventData.clusterId,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if clusterInfo != nil {
+			attrs["databricksClusterId"] = eventData.clusterId
+			attrs["databricksClusterName"] = clusterInfo.Name
+			attrs["databricksClusterSource"] = clusterInfo.Source
+			attrs["databricksClusterInstancePoolId"] =
+				clusterInfo.InstancePoolId
+		}
+	}
+
+	attrs["databricksPipelineId"] = eventData.pipelineId
+	attrs["databricksPipelineUpdateId"] = eventData.updateId
+
+	attrs["pipelineName"] = eventData.pipelineName
+
+	return attrs, nil
 }
 
-func writeUpdateMetrics(
-	metricPrefix string,
+func makePipelineSummaryAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	pipelineCounters *pipelineCounters,
+	updateCounters *updateCounters,
+	flowCounters *flowCounters,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	attrs, err := makePipelineBaseAttributes(ctx, w, nil, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add pipeline counts
+	attrs["deletedPipelineCount"] = pipelineCounters.deleted
+	attrs["deployingPipelineCount"] = pipelineCounters.deploying
+	attrs["failedPipelineCount"] = pipelineCounters.failed
+	attrs["idlePipelineCount"] = pipelineCounters.idle
+	attrs["recoveringPipelineCount"] = pipelineCounters.recovering
+	attrs["resettingPipelineCount"] = pipelineCounters.resetting
+	attrs["runningPipelineCount"] = pipelineCounters.running
+	attrs["startingPipelineCount"] = pipelineCounters.starting
+	attrs["stoppingPipelineCount"] = pipelineCounters.stopping
+
+	// Add update counts
+	attrs["createdUpdateCount"] = updateCounters.created
+	attrs["initializingUpdateCount"] = updateCounters.initializing
+	attrs["queuedUpdateCount"] = updateCounters.queued
+	attrs["resettingUpdateCount"] = updateCounters.resetting
+	attrs["runningUpdateCount"] = updateCounters.running
+	attrs["settingUpTablesUpdateCount"] = updateCounters.settingUpTables
+	attrs["stoppingUpdateCount"] = updateCounters.stopping
+	attrs["waitingForResourcesUpdateCount"] = updateCounters.waitingForResources
+
+	// Add flow counts
+	attrs["idleFlowCount"] = flowCounters.idle
+	attrs["planningFlowCount"] = flowCounters.planning
+	attrs["queuedFlowCount"] = flowCounters.queued
+	attrs["runningFlowCount"] = flowCounters.running
+	attrs["startingFlowCount"] = flowCounters.starting
+
+	return attrs, nil
+}
+
+func makePipelineUpdateBaseAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	event string,
+	update *updateData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	attrs, err := makePipelineBaseAttributes(ctx, w, &update.eventData, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs["event"] = event
+
+	// creationTime is guaranteed to be set when this function is called by both
+	// makePipelineUpdateStartAttributes and
+	// makePipelineUpdateCompleteAttributes because they are only called by
+	// addUpdates when creationTime is non-zero.
+	attrs["creationTime"] = update.creationTime.UnixMilli()
+
+	return attrs, nil
+}
+
+func makePipelineUpdateStartAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	update *updateData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	return makePipelineUpdateBaseAttributes(ctx, w, "start", update, tags)
+}
+
+func makePipelineUpdateCompleteAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	update *updateData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	attrs, err := makePipelineUpdateBaseAttributes(
+		ctx,
+		w,
+		"complete",
+		update,
+		tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs["status"] = string(update.state)
+
+	// A note on times and durations:
+	//
+	// Updates always have a creation and completion time and both are
+	// guaranteed to be set when this function is called because it is only
+	// called by addUpdates when creationTime is non-zero and completionTime is
+	// greater than last run. The update duration is always completionTime -
+	// creationTime. Note that the creationTime attribute is set in
+	// makePipelineUpdateBaseAttributes.
+	//
+	// Updates include a wait start time only if a WAITING_FOR_RESOURCES event
+	// was seen. If it was seen, the duration is startTime - waitStartTime if an
+	// INITIALIZING event was seen or completionTime - waitStartTime if not. In
+	// the latter case, the update must have gone straight from
+	// WAITING_FOR_RESOURCES to to a terminal state like FAILED or CANCELLED.
+	// If no WAITING_FOR_RESOURCES event was seen at all, the update didn't have
+	// to wait and neither the wait start time nor the wait duration attribute
+	// are set.
+	//
+	// Updates include a start time only if an INITIALIZING event was seen. If
+	// it was seen, the run duration is completionTime - startTime. Otherwise,
+	// neither the start time nor the run duration attribute are set.
+
+	attrs["completionTime"] = update.completionTime.UnixMilli()
+	attrs["duration"] = int64(
+		update.completionTime.Sub(update.creationTime) / time.Millisecond)
+
+	if !update.waitStartTime.IsZero() {
+		// waitStartTime is non-zero so we saw a WAITING_FOR_RESOURCES event
+		attrs["waitStartTime"] = update.waitStartTime.UnixMilli()
+		// waitDuration is set to startTime - waitStartTime or
+		// completionTime - waitStartTime
+		attrs["waitDuration"] = calcUpdateWaitDuration(update)
+	}
+
+	if !update.startTime.IsZero() {
+		// startTime is non-zero so we saw an INITIALIZING event
+		attrs["startTime"] = update.startTime.UnixMilli()
+		// runDuration is set to completionTime - startTime
+		attrs["runDuration"] = calcUpdateRunDuration(update)
+	}
+
+	return attrs, nil
+}
+
+func makePipelineFlowBaseAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	event string,
+	flow *flowData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	attrs, err := makePipelineBaseAttributes(ctx, w, &flow.eventData, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs["event"] = event
+
+	// We store the flow ID and flow name using the databricks* convention
+	// to enable facet linking from Spark metrics or other metrics which use the
+	// databricks* naming convention.
+	attrs["databricksPipelineFlowId"] = flow.id
+	attrs["databricksPipelineFlowName"] = flow.name
+
+	attrs["queueStartTime"] = flow.queueStartTime.UnixMilli()
+
+	return attrs, nil
+}
+
+func makePipelineFlowStartAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	flow *flowData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	return makePipelineFlowBaseAttributes(ctx, w, "start", flow, tags)
+}
+
+func makePipelineFlowCompleteAttributes(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	flow *flowData,
+	tags map[string]string,
+) (map[string]interface{}, error) {
+	attrs, err := makePipelineFlowBaseAttributes(
+		ctx,
+		w,
+		"complete",
+		flow,
+		tags,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs["status"] = string(flow.status)
+
+	// A note on times and durations:
+	//
+	// Flows always have a queueStartTime and completionTime and both are
+	// guaranteed to be set when this function is called because it is only
+	// called by addFlows when queueStartTime is non-zero and completionTime is
+	// greater than last run.
+	//
+	// The flow duration is set to completionTime - startTime and the flow start
+	// time is set _only_ if a STARTING event was seen. If a STARTING event was
+	// not seen, the flow must have gone straight from QUEUED or PLANNING to a
+	// terminal state like FAILED or SKIPPED. In this case, neither the flow
+	// start time nor the flow duration are set since it never started running.
+	//
+	// A queue duration is always set. It is set to
+	// planStartTime - queueStartTime if a PLANNING event was seen,
+	// startTime - queueStartTime if a STARTING event was seen, or
+	// completionTime - queueStartTime if neither the STARTING nor PLANNING
+	// events were seen. Note that the queueStartTime attribute is set in
+	// makePipelineFlowBaseAttributes.
+	//
+	// Flows have a planStartTime if a PLANNING event was seen. If it was seen,
+	// the planning duration is startTime - planStartTime if a STARTING event
+	// was seen or completionTime - planStartTime if not. In the latter case,
+	// the flow must have gone straight from PLANNING to to a terminal state
+	// like FAILED or SKIPPED. If no PLANNING event was seen at all, the flow
+	// didn't have to plan so neither the plan start time nor the plan duration
+	// are set.
+
+	attrs["completionTime"] = flow.completionTime.UnixMilli()
+
+	// queueDuration is set to planStartTime - queueStartTime,
+	// startTime - queueStartTime, or completionTime - queueStartTime
+	attrs["queueDuration"] = calcFlowQueueDuration(flow)
+
+	if !flow.planStartTime.IsZero() {
+		// planStartTime is non-zero so we saw a PLANNING event
+		attrs["planStartTime"] = flow.planStartTime.UnixMilli()
+		// planDuration is set to startTime - planStartTime if a STARTING event
+		// was seen or completionTime - planStartTime if not.
+		attrs["planDuration"] = calcFlowPlanDuration(flow)
+	}
+
+	if !flow.startTime.IsZero() {
+		// startTime is non-zero so we saw a STARTING event
+		attrs["startTime"] = flow.startTime.UnixMilli()
+		// duration is set to completionTime - startTime
+		attrs["duration"] = int64(
+			flow.completionTime.Sub(flow.startTime) / time.Millisecond)
+	}
+
+	// Record flow metrics
+	setFlowMetrics(flow, attrs)
+
+	return attrs, nil
+}
+
+func calcUpdateWaitDuration(update *updateData) int64 {
+	// waitStartTime is guaranteed to be non-zero when this function is called
+	// because it is only called by makePipelineUpdateCompleteAttributes when
+	// waitStartTime is non-zero.
+
+	if !update.startTime.IsZero() {
+		// If startTime is non-zero, the update made it to INITIALIZING
+		// after WAITING_FOR_RESOURCES. Record waiting duration as
+		// startTime - waitStartTime.
+		return int64(
+			update.startTime.Sub(update.waitStartTime) /
+				time.Millisecond)
+	}
+
+	// completionTime is guaranteed to be non-zero when this function is called
+	// because it is only called from makePipelineUpdateCompleteAttributes which
+	// is only called when a completionTime occurs after the last run time.
+	//
+	// If startTime is zero, the update went from WAITING_FOR_RESOURCES to a
+	// terminal state like FAILED or CANCELED.
+	//
+	// Return waiting duration as completionTime - waitStartTime.
+	return int64(
+		update.completionTime.Sub(update.waitStartTime) /
+			time.Millisecond)
+}
+
+func calcUpdateRunDuration(update *updateData) int64 {
+	// startTime is guaranteed to be non-zero when this function is called
+	// because it is only called by makePipelineUpdateCompleteAttributes when
+	// startTime is non-zero.
+
+	// completionTime is guaranteed to be non-zero when this function is called
+	// because it is only called from makePipelineUpdateCompleteAttributes which
+	// is only called when a completionTime occurs after the last run time.
+	//
+	// Record run duration as completionTime - startTime.
+	return int64(
+		update.completionTime.Sub(update.startTime) /
+			time.Millisecond)
+}
+
+func calcFlowQueueDuration(flow *flowData) int64 {
+	// queueStartTime is guaranteed to be non-zero when this function is called
+	// because it is only called by makePipelineFlowCompleteAttributes which
+	// is only called by addFlows when queueStartTime is non-zero.
+	if !flow.planStartTime.IsZero() {
+		// If planningTime is non-zero, the flow made it to PLANNING after
+		// QUEUED. Record queue duration as planStartTime - queueStartTime.
+		return int64(flow.planStartTime.Sub(flow.queueStartTime) /
+			time.Millisecond)
+	} else if !flow.startTime.IsZero() {
+		// If startTime is non-zero, the flow went from QUEUED to STARTING
+		// (the flow did not do any PLANNING). Record queue duration as
+		// startTime - queueStartTime.
+		return int64(flow.startTime.Sub(flow.queueStartTime) /
+			time.Millisecond)
+	}
+
+	// completionTime is guaranteed to be non-zero when this function is called
+	// because it is only called from makePipelineFlowCompleteAttributes which
+	// is only called when a completionTime occurs after the last run time.
+	//
+	// Record run duration as completionTime - queueStartTime.
+	return int64(flow.completionTime.Sub(flow.queueStartTime) /
+		time.Millisecond)
+}
+
+func calcFlowPlanDuration(flow *flowData) int64 {
+	// planStartTime is guaranteed to be non-zero when this function is called
+	// because it is only called by makePipelineFlowCompleteAttributes when
+	// planStartTime is non-zero.
+	if !flow.startTime.IsZero() {
+		// If startTime is non-zero, the flow made it to STARTING after
+		// PLANNING. Record plan duration as startTime - planStartTime.
+		return int64(flow.startTime.Sub(flow.planStartTime) /
+			time.Millisecond)
+	}
+
+	// completionTime is guaranteed to be non-zero when this function is called
+	// because it is only called from makePipelineFlowCompleteAttributes which
+	// is only called when a completionTime occurs after the last run time.
+	//
+	// Record run duration as completionTime - planStartTime.
+	return int64(flow.completionTime.Sub(flow.planStartTime) /
+		time.Millisecond)
+}
+
+func setFlowMetrics(
+	flow *flowData,
+	attrs map[string]interface{},
+) {
+	// Record any flow metrics we found. These will only be non-nil if we
+	// saw a flow_progress termination event AND we saw the corresponding
+	// metrics on that event.
+
+	if flow.backlogBytes != nil {
+		attrs["backlogBytes"] = *flow.backlogBytes
+	}
+
+	if flow.backlogFiles != nil {
+		attrs["backlogFileCount"] = *flow.backlogFiles
+	}
+
+	if flow.numOutputRows != nil {
+		attrs["outputRowCount"] = *flow.numOutputRows
+	}
+
+	if flow.droppedRecords != nil {
+		attrs["droppedRecordCount"] = *flow.droppedRecords
+	}
+}
+
+func addFlowExpectations(
+	ctx context.Context,
+	w DatabricksWorkspace,
+	flow *flowData,
+	tags map[string]string,
+	writer chan<- model.Event,
+) error {
+	for _, expectation := range flow.expectations {
+		attrs, err := makePipelineBaseAttributes(
+			ctx,
+			w,
+			&flow.eventData,
+			tags,
+		)
+		if err != nil {
+			return err
+		}
+
+		attrs["databricksPipelineFlowId"] = flow.id
+		attrs["databricksPipelineFlowName"] = flow.name
+
+		attrs["name"] = expectation.Name
+		attrs["dataset"] = expectation.Dataset
+		attrs["passedRecordCount"] = expectation.PassedRecords
+		attrs["failedRecordCount"] = expectation.FailedRecords
+
+		writer <- model.Event{
+			Type:       "DatabricksPipelineFlowExpectation",
+			Timestamp:  Now().UnixMilli(),
+			Attributes: attrs,
+		}
+	}
+
+	return nil
+}
+
+func addUpdates(
+	ctx context.Context,
+	w DatabricksWorkspace,
 	updates map[string]*updateData,
 	oldUpdates map[string]struct{},
-	includeUpdateId bool,
+	lastRun time.Time,
 	tags map[string]string,
-	writer chan <- model.Metric,
-) {
+	writer chan<- model.Event,
+) error {
 	for _, update := range updates {
 		// Double check that we aren't ignoring this update. This handles cases
 		// where update events may have come in out of order. For example, we
@@ -917,768 +1407,135 @@ func writeUpdateMetrics(
 			continue
 		}
 
-		// If the update hasn't been created yet, the start time (set when the
-		// create_update event is processed) will be zero. Nothing to report in
-		// this case.
-		if update.startTime.IsZero() {
+		// If the update startTime is zero, we never saw the create_update event
+		// so report nothing since we would not be able to properly calculate
+		// the update duration and also means we didn't see the entire update.
+		// This probably means the create_update event occurred before the start
+		// of the time range used to query the pipeline event logs.
+		if update.creationTime.IsZero() {
 			continue
 		}
 
-		attrs := makeEventAttrs(&update.eventData, includeUpdateId, tags)
-
-		attrs["databricksPipelineUpdateStatus"] = update.state
-
-		// Always write the waiting duration.
-		writeUpdateWaitingDuration(metricPrefix, update, attrs, writer)
-
-		// If completionTime is zero, we haven't seen a termination event yet
-		// which means the update hasn't completed, record the _wall clock_
-		// duration only. We know the update was at least created because we
-		// passed the startTime check above.
-		if update.completionTime.IsZero() {
-			// Record the duration as now - startTime. We know startTime is
-			// non-zero since we passed the IsZero() check above.
-			writeGauge(
-				metricPrefix,
-				"pipeline.update.duration",
-				int64(time.Now().UTC().Sub(update.startTime) /
-					time.Millisecond),
-				attrs,
-				writer,
+		// If the start time is greater than the last run time, this update
+		// started since the last run of the integration so write out a start
+		// event
+		if update.creationTime.After(lastRun) {
+			attrs, err := makePipelineUpdateStartAttributes(
+				ctx,
+				w,
+				update,
+				tags,
 			)
-
-			// If we've seen an INITIALIZING event, startRunTime will be
-			// non-zero. Record the run time as now - startRunTime.
-			if !update.startRunTime.IsZero() {
-				writeGauge(
-					metricPrefix,
-					"pipeline.update.runTime",
-					int64(time.Now().UTC().Sub(update.startRunTime) /
-						time.Millisecond),
-					attrs,
-					writer,
-				)
+			if err != nil {
+				return err
 			}
 
-			continue
+			writer <- model.Event{
+				Type:       "DatabricksPipelineUpdate",
+				Timestamp:  Now().UnixMilli(),
+				Attributes: attrs,
+			}
 		}
 
-		// If we get to here it means we have a valid start and completion time.
-		// This means the update terminated in some way. See
-		// isUpdateTerminated() for the possible termination statuses.
-
-		// Record the actual update duration as completionTime - startTime.
-		writeGauge(
-			metricPrefix,
-			"pipeline.update.duration",
-			int64(update.completionTime.Sub(update.startTime) /
-				time.Millisecond),
-			attrs,
-			writer,
-		)
-
-		// Check for a non-zero startRunTime. If there is no startRunTime, we
-		// did not see an INITIALIZING event so the flow went from being created
-		// or from WAITING_FOR_RESOURCES straight to a terminal state. This can
-		// happen if the update FAILED or was CANCELED. In this case, it should
-		// have no duration. Record nothing. Otherwise, we saw an INITIALIZING
-		// event, so record the actual runTime duration as
-		// completionTime - startRunTime.
-		if !update.startRunTime.IsZero() {
-			writeGauge(
-				metricPrefix,
-				"pipeline.update.runTime",
-				int64(update.completionTime.Sub(update.startRunTime) /
-					time.Millisecond),
-				attrs,
-				writer,
+		// If the completion time is greater than the last run time, this update
+		// completed since the last run of the integration so write out a
+		// complete event
+		if update.completionTime.After(lastRun) {
+			attrs, err := makePipelineUpdateCompleteAttributes(
+				ctx,
+				w,
+				update,
+				tags,
 			)
+			if err != nil {
+				return err
+			}
+
+			writer <- model.Event{
+				Type:       "DatabricksPipelineUpdate",
+				Timestamp:  Now().UnixMilli(),
+				Attributes: attrs,
+			}
 		}
 	}
+
+	return nil
 }
 
-func writeUpdateWaitingDuration(
-	metricPrefix string,
-	update *updateData,
-	attrs map[string]interface{},
-	writer chan <- model.Metric,
-) {
-	// waitingTime will be non-zero if we saw a WAITING_FOR_RESOURCES event.
-	if !update.waitingTime.IsZero() {
-		// If we are still in the WAITING_FOR_RESOURCES state, record the
-		// _wall clock_ duration. Otherwise record the actual waiting duration
-		// as startRunTime - waitingTime if startRunTime is non-zero or
-		// completionTime - waitingTime if completionTime is non-zero. The
-		// latter case should handle transitions from WAITING_FOR_RESOURCES to a
-		// terminal state like FAILED or CANCELED.
-		if update.state ==
-			databricksSdkPipelines.UpdateInfoStateWaitingForResources {
-			// The update is still in WAITING_FOR_RESOURCES. Record waiting
-			// duration as now - waitingTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.update.duration.wait",
-				int64(time.Now().UTC().Sub(update.waitingTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !update.startRunTime.IsZero() {
-			// If startRunTime is non-zero, the update made it to INITIALING
-			// after WAITING_FOR_RESOURCES. Record waiting duration as
-			// startRunTime - waitingTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.update.duration.wait",
-				int64(update.startRunTime.Sub(update.waitingTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !update.completionTime.IsZero() {
-			// If completionTime is non-zero, the update went from
-			// WAITING_FOR_RESOURCES to a terminal state like FAILED or
-			// CANCELED. Record waiting duration as
-			// completionTime - waitingTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.update.duration.wait",
-				int64(update.completionTime.Sub(update.waitingTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		}
-
-		// Not sure what it would mean if none of the above are true so record
-		// nothing.
-	}
-}
-
-func writeFlowMetrics(
-	metricPrefix string,
+func addFlows(
+	ctx context.Context,
+	w DatabricksWorkspace,
 	flows map[string]*flowData,
 	oldFlows map[string]struct{},
-	includeUpdateId bool,
+	lastRun time.Time,
 	tags map[string]string,
-	writer chan <- model.Metric,
-) {
+	writer chan<- model.Event,
+) error {
 	for _, flow := range flows {
 		// Double check that we aren't ignoring this flow. This handles cases
 		// where flow events may have come in out of order. For example, we got
 		// a RUNNING event before a termination event. This shouldn't happen
 		// since the API returns events in descending order by timestamp but
 		// just in case, this prevents duplicate data.
-		_, ok := oldFlows[flow.name]
+		_, ok := oldFlows[flowName(flow.eventData.updateId, flow.name)]
 		if ok {
 			continue
 		}
 
-		// If the flow hasn't even been queued yet, the queued time (set when
-		// the flow_progress QUEUED event is processed) will be zero. Nothing to
-		// report in this case.
-		if flow.queuedTime.IsZero() {
+		// If the update startTime is zero, we never saw the QUEUED
+		// flow_progress event so report nothing since we would not be able to
+		// properly calculate the flow duration and also means we didn't see
+		// the entire flow. This probably means the QUEUED flow_progress event
+		// occurred before the start of the time range used to query the
+		// pipeline event logs.
+		if flow.queueStartTime.IsZero() {
 			continue
 		}
 
-		attrs := makeEventAttrs(&flow.eventData, includeUpdateId, tags)
-
-		attrs["databricksPipelineFlowId"] = flow.id
-		attrs["databricksPipelineFlowName"] = flow.name
-		attrs["databricksPipelineFlowStatus"] = flow.status
-
-		// Always write the queue and planning durations.
-
-		writeFlowQueueDuration(metricPrefix, flow, attrs, writer)
-		writeFlowPlanningDuration(metricPrefix, flow, attrs, writer)
-
-		// If completionTime is zero, we haven't seen a termination event yet
-		// which means the flow hasn't completed, record the _wall clock_
-		// duration only. We know the flow was at least QUEUED because we passed
-		// the queueTime check above.
-		if flow.completionTime.IsZero() {
-			// If startTime is non-zero, we saw the STARTING event. Since
-			// completionTime is zero, the flow hasn't terminated yet so record
-			// the total flow duration as now - startTime. If the startTime is
-			// zero, we did not see a STARTING event so the flow went from
-			// QUEUED to some other state and never started running. In this
-			// case it should have no duration. Record nothing.
-			if !flow.startTime.IsZero() {
-				writeGauge(
-					metricPrefix,
-					"pipeline.flow.duration",
-					int64(time.Now().UTC().Sub(flow.startTime) /
-						time.Millisecond),
-					attrs,
-					writer,
-				)
+		// If the queue start time is greater than the last run time, this flow
+		// was queued since the last run of the integration so write out a start
+		// event
+		if flow.queueStartTime.After(lastRun) {
+			attrs, err := makePipelineFlowStartAttributes(ctx, w, flow, tags)
+			if err != nil {
+				return err
 			}
 
-			continue
+			writer <- model.Event{
+				Type:       "DatabricksPipelineFlow",
+				Timestamp:  Now().UnixMilli(),
+				Attributes: attrs,
+			}
 		}
 
-		// If we get to here it means we have a valid queued and completion
-		// time. This means the flow terminated in some way. See
-		// isFlowTerminated() for the possible termination statuses.
-
-		// Check for a non-zero start time. If there is no startTime, we did not
-		// see a STARTING event so the flow went from QUEUED straight to a
-		// terminal state. This can happen if the flow stopped/failed/was
-		// skipped/was excluded/completed after it was QUEUED. In this case, it
-		// should have no duration. Record nothing. Otherwise we saw a STARTING
-		// event, so record the actual run time as completion time - startTime.
-		if !flow.startTime.IsZero() {
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration",
-				int64(flow.completionTime.Sub(flow.startTime) /
-					time.Millisecond),
-				attrs,
-				writer,
+		// If the completion time is greater than the last run time, this update
+		// completed since the last run of the integration so write out a
+		// complete event
+		if flow.completionTime.After(lastRun) {
+			attrs, err := makePipelineFlowCompleteAttributes(
+				ctx,
+				w,
+				flow,
+				tags,
 			)
-		}
+			if err != nil {
+				return err
+			}
 
-		// Record any flow metrics we found. These will only be non-nil if we
-		// saw a termination event (see getOrCreateFlowData()) AND we saw the
-		// corresponding metric on the flow_progress event. Since we only
-		// process termination events once, we will only record these metrics
-		// once and can use regular aggregation functions to do things like
-		// calculate average backlog bytes.
+			writer <- model.Event{
+				Type:       "DatabricksPipelineFlow",
+				Timestamp:  Now().UnixMilli(),
+				Attributes: attrs,
+			}
 
-		if flow.backlogBytes != nil {
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.backlogBytes",
-				*flow.backlogBytes,
-				attrs,
-				writer,
-			)
-		}
-
-		if flow.backlogFiles != nil {
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.backlogFiles",
-				*flow.backlogFiles,
-				attrs,
-				writer,
-			)
-		}
-
-		if flow.numOutputRows != nil {
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.rowsWritten",
-				*flow.numOutputRows,
-				attrs,
-				writer,
-			)
-		}
-
-		if flow.droppedRecords != nil {
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.recordsDropped",
-				*flow.droppedRecords,
-				attrs,
-				writer,
-			)
-		}
-
-		// If there were expectations for the flow, record expectation metrics.
-
-		if len(flow.expectations) > 0 {
-			for _, e := range flow.expectations {
-				expectationAttrs := maps.Clone(attrs)
-				expectationAttrs["databricksPipelineFlowExpectationName"] =
-					e.Name
-				expectationAttrs["databricksPipelineDatasetName"] = e.Dataset
-
-				writeGauge(
-					metricPrefix,
-					"pipeline.flow.expectation.recordsPassed",
-					e.PassedRecords,
-					expectationAttrs,
-					writer,
-				)
-				writeGauge(
-					metricPrefix,
-					"pipeline.flow.expectation.recordsFailed",
-					e.FailedRecords,
-					expectationAttrs,
-					writer,
-				)
+			// If there were expectations for the flow, record expectation
+			// metrics
+			err = addFlowExpectations(ctx, w, flow, tags, writer)
+			if err != nil {
+				return err
 			}
 		}
 	}
-}
 
-func writeFlowQueueDuration(
-	metricPrefix string,
-	flow *flowData,
-	attrs map[string]interface{},
-	writer chan <- model.Metric,
-) {
-	// queuedTime will be non-zero if we saw a QUEUED event.
-	if !flow.queuedTime.IsZero() {
-		// If we are still in the QUEUED state, record the _wall clock_
-		// duration. Otherwise record the actual queue duration as
-		// planningTime - queuedTime if planningTime is non-zero, or
-		// startTime - queuedTime if the startTime is non-zero, or
-		// completionTime - queuedTime if completionTime is non-zero. The latter
-		// case should handle transitions from QUEUED to a termination state
-		// like SKIPPED or STOPPED.
-		if flow.status == FlowInfoStatusQueued {
-			// The flow is still in QUEUED. Record queue duration as
-			// now - queuedTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.queue",
-				int64(time.Now().UTC().Sub(flow.queuedTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !flow.planningTime.IsZero() {
-			// If planningTime is non-zero, the flow made it to PLANNING after
-			// QUEUED. Record queue duration as planningTime - queuedTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.queue",
-				int64(flow.planningTime.Sub(flow.queuedTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !flow.startTime.IsZero() {
-			// If startTime is non-zero, the flow went from QUEUED to STARTING
-			// (the flow did not do any PLANNING). Record queue duration as
-			// startTime - queuedTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.queue",
-				int64(flow.startTime.Sub(flow.queuedTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !flow.completionTime.IsZero() {
-			// If completionTime is non-zero, the flow went from QUEUED to a
-			// termination state like SKIPPED or STOPPED. Record queue duration
-			// was completionTime - queuedTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.queue",
-				int64(flow.completionTime.Sub(flow.queuedTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		}
-
-		// Not sure what it would mean if none of the above are true so record
-		// nothing
-	}
-}
-
-func writeFlowPlanningDuration(
-	metricPrefix string,
-	flow *flowData,
-	attrs map[string]interface{},
-	writer chan <- model.Metric,
-) {
-	// planningTime will be non-zero if we saw a PLANNING event.
-	if !flow.planningTime.IsZero() {
-		// If we are still in the PLANNING state, record the _wall clock_
-		// duration. Otherwise record the actual planning duration as
-		// startTime - planningTime if the startTime is non-zero or
-		// completionTime - planningTime if completionTime is non-zero. The
-		// latter case should handle transitions from PLANNING to a termination
-		// state like FAILED or STOPPED.
-		if flow.status == FlowInfoStatusPlanning {
-			// The flow is still in PLANNING. Record planning duration as
-			// now - planningTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.plan",
-				int64(time.Now().UTC().Sub(flow.planningTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !flow.startTime.IsZero() {
-			// If startTime is non-zero, the flow made it to STARTING after
-			// PLANNING. Record planing duration as startTime - planningTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.plan",
-				int64(flow.startTime.Sub(flow.planningTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		} else if !flow.completionTime.IsZero() {
-			// If completionTime is non-zero, the flow went from PLANNING to a
-			// termination state like FAILED or STOPPED. Record planning
-			// duration as completionTime - planningTime.
-			writeGauge(
-				metricPrefix,
-				"pipeline.flow.duration.plan",
-				int64(flow.completionTime.Sub(flow.planningTime) /
-					time.Millisecond),
-				attrs,
-				writer,
-			)
-		}
-
-		// Not sure what it would mean if none of the above are true so record
-		// nothing
-	}
-}
-
-func writePipelineCounters(
-	metricPrefix string,
-	counters *pipelineCounters,
-	tags map[string]string,
-	writer chan <- model.Metric,
-) {
-	attrs := makeAttributesMap(tags)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateDeleted)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.deleted,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateDeploying)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.deploying,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateFailed)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.failed,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateIdle)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.idle,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateRecovering)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.recovering,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateResetting)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.resetting,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateRunning)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.running,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateStarting)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.starting,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineState"] =
-		string(databricksSdkPipelines.PipelineStateStopping)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.pipelines",
-		counters.stopping,
-		attrs,
-		writer,
-	)
-}
-
-func writeUpdateCounters(
-	metricPrefix string,
-	counters *updateCounters,
-	tags map[string]string,
-	writer chan <- model.Metric,
-) {
-	attrs := makeAttributesMap(tags)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateCanceled)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.canceled,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateCompleted)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.completed,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateCreated)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.created,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateFailed)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.failed,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateInitializing)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.initializing,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateQueued)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.queued,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateResetting)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.resetting,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateRunning)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.running,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateSettingUpTables)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.settingUpTables,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateStopping)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.stopping,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineUpdateStatus"] =
-		string(databricksSdkPipelines.UpdateInfoStateWaitingForResources)
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.updates",
-		counters.waitingForResources,
-		attrs,
-		writer,
-	)
-}
-
-func writeFlowCounters(
-	metricPrefix string,
-	counters *flowCounters,
-	tags map[string]string,
-	writer chan <- model.Metric,
-) {
-	attrs := makeAttributesMap(tags)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusCompleted
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.completed,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusExcluded
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.excluded,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusFailed
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.failed,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusIdle
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.idle,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusPlanning
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.planning,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusQueued
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.queued,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusRunning
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.running,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusSkipped
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.skipped,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusStarting
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.starting,
-		attrs,
-		writer,
-	)
-
-	attrs["databricksPipelineFlowStatus"] = FlowInfoStatusStopped
-
-	writeGauge(
-		metricPrefix,
-		"pipeline.flows",
-		counters.stopped,
-		attrs,
-		writer,
-	)
+	return nil
 }

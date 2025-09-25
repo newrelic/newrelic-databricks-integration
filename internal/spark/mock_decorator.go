@@ -1,7 +1,8 @@
 package spark
 
-// MockSparkMetricDecorator is a mock implementation of SparkMetricDecorator for testing
-type MockSparkMetricDecorator struct {
+// MockSparkEventDecorator is a mock implementation of SparkEventDecorator for
+// testing
+type MockSparkEventDecorator struct {
 	DecorateExecutorFunc func(
 		sparkExecutor *SparkExecutor,
 		attrs map[string]interface{},
@@ -23,10 +24,10 @@ type MockSparkMetricDecorator struct {
 		sparkRDD *SparkRDD,
 		attrs map[string]interface{},
 	)
-	DecorateMetricFunc   func(attrs map[string]interface{})
+	DecorateEventFunc   func(attrs map[string]interface{})
 }
 
-func (m *MockSparkMetricDecorator) DecorateExecutor(
+func (m *MockSparkEventDecorator) DecorateExecutor(
 	sparkExecutor *SparkExecutor,
 	attrs map[string]interface{},
 ) {
@@ -40,7 +41,7 @@ func (m *MockSparkMetricDecorator) DecorateExecutor(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) DecorateJob(
+func (m *MockSparkEventDecorator) DecorateJob(
 	sparkJob *SparkJob,
 	attrs map[string]interface{},
 ) {
@@ -54,7 +55,7 @@ func (m *MockSparkMetricDecorator) DecorateJob(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) DecorateStage(
+func (m *MockSparkEventDecorator) DecorateStage(
 	sparkStage *SparkStage,
 	attrs map[string]interface{},
 ) {
@@ -68,7 +69,7 @@ func (m *MockSparkMetricDecorator) DecorateStage(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) DecorateTask(
+func (m *MockSparkEventDecorator) DecorateTask(
 	sparkStage *SparkStage,
 	sparkTask *SparkTask,
 	attrs map[string]interface{},
@@ -83,7 +84,7 @@ func (m *MockSparkMetricDecorator) DecorateTask(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) DecorateRDD(
+func (m *MockSparkEventDecorator) DecorateRDD(
 	rdd *SparkRDD,
 	attrs map[string]interface{},
 ) {
@@ -97,11 +98,11 @@ func (m *MockSparkMetricDecorator) DecorateRDD(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) DecorateMetric(
+func (m *MockSparkEventDecorator) DecorateEvent(
 	attrs map[string]interface{},
 ) {
-	if m.DecorateMetricFunc != nil {
-		m.DecorateMetricFunc(attrs)
+	if m.DecorateEventFunc != nil {
+		m.DecorateEventFunc(attrs)
 
 		return
 	}
@@ -110,7 +111,7 @@ func (m *MockSparkMetricDecorator) DecorateMetric(
 	m.decorate(attrs)
 }
 
-func (m *MockSparkMetricDecorator) decorate(attrs map[string]interface{}) {
+func (m *MockSparkEventDecorator) decorate(attrs map[string]interface{}) {
 	// Add Databricks workspace attributes
 	attrs["databricksWorkspaceId"] = int64(12345)
 	attrs["databricksWorkspaceName"] = "foo.fakedomain.local"
