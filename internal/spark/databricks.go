@@ -155,9 +155,9 @@ func NewDatabricksSparkEventDecorator(
 		return nil, err
 	}
 
-	databricks.InitInfoByIdCaches(w)
+	databricks.InitCaches()
 
-	workspaceInfo, err := databricks.GetWorkspaceInfo(ctx)
+	workspaceInfo, err := databricks.GetWorkspaceInfo(ctx, w)
 	if err != nil {
 		return nil, err
 	}

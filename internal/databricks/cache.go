@@ -10,15 +10,18 @@ import (
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 )
 
-type cacheLoaderFunc[T interface{}] func(ctx context.Context) (*T, error)
+type cacheEntry[T interface{}] struct {
+	expiration 	time.Time
+	value		*T
+}
 
 type memoryCache[T interface{}] struct {
 	mu				sync.Mutex
 	expiry			time.Duration
-	value			*T
-	expiration		time.Time
-	loader			cacheLoaderFunc[T]
+	values			map[string]*cacheEntry[T]
 }
+
+const WORKSPACE_INFO_CACHE_KEY = "workspace"
 
 type WorkspaceInfo struct {
 	Id				int64
@@ -26,121 +29,113 @@ type WorkspaceInfo struct {
 	InstanceName	string
 }
 
-type clusterInfo struct {
-	name			string
-	source			string
-	creator			string
-	instancePoolId	string
-	singleUserName	string
+type ClusterInfo struct {
+	Name			string
+	Source			string
+	Creator			string
+	InstancePoolId	string
+	SingleUserName	string
 }
 
-type warehouseInfo struct {
-	name			string
-	creator			string
+type WarehouseInfo struct {
+	Name			string
+	Creator		    string
 }
 
 var (
 	workspaceInfoCache			*memoryCache[*WorkspaceInfo]
-	clusterInfoCache			*memoryCache[map[string]*clusterInfo]
-	warehouseInfoCache			*memoryCache[map[string]*warehouseInfo]
+	clusterInfoCache			*memoryCache[*ClusterInfo]
+	warehouseInfoCache			*memoryCache[*WarehouseInfo]
     // These functions are exposed like this for dependency injection purposes
 	// to enable mocking of the function in tests.
     GetWorkspaceInfo = getWorkspaceInfo
 	GetClusterInfoById = getClusterInfoById
+	GetWarehouseInfoById = getWarehouseInfoById
 )
 
-func newMemoryCache[T interface{}](
-	expiry time.Duration,
-	loader cacheLoaderFunc[T],
-) *memoryCache[T] {
+func newMemoryCache[T interface{}](expiry time.Duration) *memoryCache[T] {
 	return &memoryCache[T] {
 		expiry: expiry,
-		loader: loader,
+		values: make(map[string]*cacheEntry[T]),
 	}
 }
 
-func (m *memoryCache[T]) get(ctx context.Context) (*T, error) {
+func (m *memoryCache[T]) get(id string) *T {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.value == nil || time.Now().After(m.expiration) {
-		val, err := m.loader(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		m.value = val
-		m.expiration = time.Now().Add(m.expiry * time.Second)
+	entry, ok := m.values[id]
+	if !ok {
+		// cache miss
+		return nil
 	}
 
-	return m.value, nil
+	// cache hit
+	if !Now().After(entry.expiration) {
+		// entry not expired
+		return entry.value
+	}
+
+	// entry expired so evict the expired entry and return nil
+	delete(m.values, id)
+
+	return nil
 }
 
-/*
-func (m *memoryCache[T]) invalidate() {
+func (m *memoryCache[T]) set(id string, value *T) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.expiration = time.Time{}
-	m.value = nil
+	entry, ok := m.values[id]
+	if !ok {
+		// cache miss, create entry
+		entry = &cacheEntry[T] { value: value }
+	} else {
+		// cache hit, refresh value
+		entry.value = value
+	}
+
+	// set/update expiration
+	entry.expiration = Now().Add(m.expiry)
+
+	m.values[id] = entry
 }
-*/
 
 // @todo: allow cache expiry values to be configured
 
 // This function is not thread-safe and should not be called concurrently.
-// For now it is only called from databricks.go in the function InitPipelines()
-// so it is safe to assume that it will not be called concurrently.
-func InitInfoByIdCaches(
-	w DatabricksWorkspace,
-) {
+// For now it is called from databricks.go in the function InitPipelines()
+// and spark/databricks.go in the function NewDatabricksSparkEventDecorator()
+// and these functions do not run concurrently. If this changes, this
+// implementation may need to be updated to handle concurrent access.
+func InitCaches() {
 	if workspaceInfoCache == nil {
-		workspaceInfoCache = newMemoryCache(
-			5 * time.Minute,
-			func(ctx context.Context) (**WorkspaceInfo, error) {
-				workspaceInfo, err := buildWorkspaceInfo(ctx, w)
-				if err != nil {
-					return nil, err
-				}
-
-				return &workspaceInfo, nil
-			},
-		)
+		workspaceInfoCache = newMemoryCache[*WorkspaceInfo](5 * time.Minute)
 	}
-
 	if clusterInfoCache == nil {
-		clusterInfoCache = newMemoryCache(
-			5 * time.Minute,
-			func(ctx context.Context) (*map[string]*clusterInfo, error) {
-				m, err := buildClusterInfoByIdMap(ctx, w)
-				if err != nil {
-					return nil, err
-				}
-
-				return &m, nil
-			},
-		)
+		clusterInfoCache = newMemoryCache[*ClusterInfo](5 * time.Minute)
 	}
-
 	if warehouseInfoCache == nil {
-		warehouseInfoCache = newMemoryCache(
-			5 * time.Minute,
-			func(ctx context.Context) (*map[string]*warehouseInfo, error) {
-				m, err := buildWarehouseInfoByIdMap(ctx, w)
-				if err != nil {
-					return nil, err
-				}
-
-				return &m, nil
-			},
-		)
+		warehouseInfoCache = newMemoryCache[*WarehouseInfo](5 * time.Minute)
 	}
 }
 
-func buildWorkspaceInfo(
+func getWorkspaceInfo(
 	ctx context.Context,
 	w DatabricksWorkspace,
 ) (*WorkspaceInfo, error) {
+	info := workspaceInfoCache.get(WORKSPACE_INFO_CACHE_KEY)
+	if info != nil {
+		return *info, nil
+	}
+
+	// Because we no longer hold the mutex on the cache, it is possible that
+	// multiple goroutines could end up building the workspace info
+	// simultaneously and the last one to build it and set it into the cache
+	// "wins". Since the info each calculates will be the same, this doesn't
+	// matter much and hopefully the likelihood of an interleaving like that
+	// is low, so for now, we'll treat this possibility as acceptable.
+
 	log.Debugf("building workspace info...")
 
 	workspaceId, err := w.GetCurrentWorkspaceId(ctx)
@@ -169,123 +164,104 @@ func buildWorkspaceInfo(
 		hostname,
 	)
 
-	return &WorkspaceInfo{
-		workspaceId,
-		urlStr,
-		hostname,
-	}, nil
-}
-
-func getWorkspaceInfo(ctx context.Context) (*WorkspaceInfo, error) {
-	wi, err := workspaceInfoCache.get(ctx)
-	if err != nil {
-		return nil, err
+	workspaceInfo := &WorkspaceInfo{
+		Id: workspaceId,
+		Url: urlStr,
+		InstanceName: hostname,
 	}
 
-	return *wi, nil
-}
+	workspaceInfoCache.set(WORKSPACE_INFO_CACHE_KEY, &workspaceInfo)
 
-func buildClusterInfoByIdMap(
-	ctx context.Context,
-	w DatabricksWorkspace,
-) (map[string]*clusterInfo, error) {
-	log.Debugf("building cluster info by ID map...")
-
-	m := map[string]*clusterInfo{}
-
-	log.Debugf("listing clusters for workspace host %s", w.GetConfig().Host)
-
-	all := w.ListClusters(ctx)
-
-	for ; all.HasNext(ctx);  {
-		c, err := all.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Debugf(
-			"cluster ID: %s ; cluster name: %s",
-			c.ClusterId,
-			c.ClusterName,
-		)
-
-		clusterInfo := &clusterInfo{}
-		clusterInfo.name = c.ClusterName
-		clusterInfo.source = string(c.ClusterSource)
-		clusterInfo.creator = c.CreatorUserName
-		clusterInfo.singleUserName = c.SingleUserName
-		clusterInfo.instancePoolId = c.InstancePoolId
-
-		m[c.ClusterId] = clusterInfo
-	}
-
-	return m, nil
+	return workspaceInfo, nil
 }
 
 func getClusterInfoById(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	clusterId string,
-) (*clusterInfo, error) {
-	clusterInfoMap, err := clusterInfoCache.get(ctx)
+) (*ClusterInfo, error) {
+	info := clusterInfoCache.get(clusterId)
+	if info != nil {
+		return *info, nil
+	}
+
+	// Because we no longer hold the mutex on the cache, it is possible that
+	// multiple goroutines could end up building cluster info for this cluster
+	// simultaneously and the last one to build it and set it into the cache
+	// "wins". Since the info each calculates will be the same, this doesn't
+	// matter much and hopefully the likelihood of an interleaving like that
+	// is low, so for now, we'll treat this possibility as acceptable.
+
+	log.Debugf(
+		"building cluster info for cluster %s and workspacehost %s...",
+		clusterId,
+		w.GetConfig().Host,
+	)
+
+	c, err := w.GetClusterById(ctx, clusterId)
 	if err != nil {
 		return nil, err
 	}
 
-	clusterInfo, ok := (*clusterInfoMap)[clusterId]
-	if ok {
-		return clusterInfo, nil
+	log.Debugf(
+		"cluster ID: %s ; cluster name: %s",
+		c.ClusterId,
+		c.ClusterName,
+	)
+
+	clusterInfo := &ClusterInfo{
+		Name: c.ClusterName,
+		Source: string(c.ClusterSource),
+		Creator: c.CreatorUserName,
+		SingleUserName: c.SingleUserName,
+		InstancePoolId: c.InstancePoolId,
 	}
 
-	return nil, nil
-}
+	clusterInfoCache.set(clusterId, &clusterInfo)
 
-func buildWarehouseInfoByIdMap(
-	ctx context.Context,
-	w DatabricksWorkspace,
-) (map[string]*warehouseInfo, error) {
-	log.Debugf("building warehouse info by ID map...")
-
-	m := map[string]*warehouseInfo{}
-
-	log.Debugf("listing warehouses for workspace host %s", w.GetConfig().Host)
-
-	all := w.ListWarehouses(ctx)
-
-	for ; all.HasNext(ctx); {
-		warehouse, err := all.Next(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Debugf(
-			"warehouse ID: %s ; warehouse name: %s",
-			warehouse.Id,
-			warehouse.Name,
-		)
-
-		warehouseInfo := &warehouseInfo{}
-		warehouseInfo.name = warehouse.Name
-		warehouseInfo.creator = warehouse.CreatorName
-
-		m[warehouse.Id] = warehouseInfo
-	}
-
-	return m, nil
+	return clusterInfo, nil
 }
 
 func getWarehouseInfoById(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	warehouseId string,
-) (*warehouseInfo, error) {
-	warehouseInfoMap, err := warehouseInfoCache.get(ctx)
+) (*WarehouseInfo, error) {
+	info := warehouseInfoCache.get(warehouseId)
+	if info != nil {
+		return *info, nil
+	}
+
+	// Because we no longer hold the mutex on the cache, it is possible that
+	// multiple goroutines could end up building warehouse info for this
+	// warehouse simultaneously and the last one to build it and set it into the
+	// cache "wins". Since the info each calculates will be the same, this
+	// doesn't matter much and hopefully the likelihood of an interleaving like
+	// that is low, so for now, we'll treat this possibility as acceptable.
+
+	log.Debugf(
+		"building warehouse info for warehouse %s and workspace host %s...",
+		warehouseId,
+		w.GetConfig().Host,
+	)
+
+	warehouse, err := w.GetWarehouseById(ctx, warehouseId)
 	if err != nil {
 		return nil, err
 	}
 
-	warehouseInfo, ok := (*warehouseInfoMap)[warehouseId]
-	if ok {
-		return warehouseInfo, nil
+	log.Debugf(
+		"warehouse ID: %s ; warehouse name: %s",
+		warehouse.Id,
+		warehouse.Name,
+	)
+
+	warehouseInfo := &WarehouseInfo{
+		Name: warehouse.Name,
+		Creator: warehouse.CreatorName,
 	}
 
-	return nil, nil
+	warehouseInfoCache.set(warehouseId, &warehouseInfo)
+
+	return warehouseInfo, nil
 }

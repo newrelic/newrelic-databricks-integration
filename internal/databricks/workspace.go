@@ -26,6 +26,16 @@ type DatabricksWorkspace interface {
 
     GetCurrentWorkspaceId(ctx context.Context) (int64, error)
 
+    GetClusterById(
+        ctx context.Context,
+        clusterId string,
+    ) (*databricksSdkCompute.ClusterDetails, error)
+
+    GetWarehouseById(
+        ctx context.Context,
+        warehouseId string,
+    ) (*databricksSdkSql.GetWarehouseResponse, error)
+
     ListClusters(ctx context.Context) (
         databricksSdkListing.Iterator[databricksSdkCompute.ClusterDetails],
     )
@@ -197,6 +207,20 @@ func (d *databricksWorkspaceImpl) GetCurrentWorkspaceId(
     ctx context.Context,
 ) (int64, error) {
     return d.w.CurrentWorkspaceID(ctx)
+}
+
+func (d *databricksWorkspaceImpl) GetClusterById(
+    ctx context.Context,
+    clusterId string,
+) (*databricksSdkCompute.ClusterDetails, error) {
+    return d.w.Clusters.GetByClusterId(ctx, clusterId)
+}
+
+func (d *databricksWorkspaceImpl) GetWarehouseById(
+    ctx context.Context,
+    warehouseId string,
+) (*databricksSdkSql.GetWarehouseResponse, error) {
+    return d.w.Warehouses.GetById(ctx, warehouseId)
 }
 
 func (d *databricksWorkspaceImpl) ListClusters(ctx context.Context) (

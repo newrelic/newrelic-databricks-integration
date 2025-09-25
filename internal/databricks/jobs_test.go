@@ -39,7 +39,10 @@ func setupMockWorkspaceAndInfo() (*MockWorkspace, func()) {
 	mock := setupMockWorkspace()
 
 	originalGetWorkspaceInfo := GetWorkspaceInfo
-	GetWorkspaceInfo = func(ctx context.Context) (*WorkspaceInfo, error) {
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (*WorkspaceInfo, error) {
 		return &WorkspaceInfo{
 			Id:           mock.WorkspaceId,
 			Url:          mock.Config.Host,
@@ -57,14 +60,18 @@ func setupMockWorkspaceAndInfo() (*MockWorkspace, func()) {
 
 func setupMockClusterInfo() func() {
 	originalGetClusterInfoById := GetClusterInfoById
-	GetClusterInfoById = func(ctx context.Context, clusterId string) (
-		*clusterInfo,
+	GetClusterInfoById = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+		clusterId string,
+	) (
+		*ClusterInfo,
 		error,
 	) {
-		return &clusterInfo{
-			name:           "fake-cluster-name",
-			source:         "fake-cluster-source",
-			instancePoolId: "fake-cluster-instance-pool-id",
+		return &ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			InstancePoolId: "fake-cluster-instance-pool-id",
 		}, nil
 	}
 
@@ -100,7 +107,7 @@ func TestNewDatabricksJobRunReceiver_ValidParams(t *testing.T) {
 		tags,
 	)
 
-	// Verify results
+	// Verify result
 	assert.NotNil(t, receiver)
 
 	assert.Equal(t, mockIntegration, receiver.i)
@@ -235,8 +242,9 @@ func TestPollEvents_ListJobRunsError(t *testing.T) {
 }
 
 func TestPollEvents_ListJobRunsEmpty(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -393,8 +401,9 @@ func TestPollEvents_ListJobRunsEmpty(t *testing.T) {
 }
 
 func TestPollEvents_LastRunUpdated(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -575,7 +584,7 @@ func TestPollEvents_MakeJobRunSummaryAttributesError(t *testing.T) {
 	}()
 
 	// Set GetWorkspaceInfo to return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(ctx context.Context, w DatabricksWorkspace) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -684,7 +693,7 @@ func TestPollEvents_MakeJobRunStartAttributesError(t *testing.T) {
 	}()
 
 	// Set GetWorkspaceInfo to return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(ctx context.Context, w DatabricksWorkspace) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -795,8 +804,9 @@ func TestPollEvents_MakeJobRunStartAttributesError(t *testing.T) {
 }
 
 func TestPollEvents_RunStartedBefore(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -969,8 +979,9 @@ func TestPollEvents_RunStartedBefore(t *testing.T) {
 }
 
 func TestPollEvents_RunStartedAfter(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -1197,7 +1208,7 @@ func TestPollEvents_MakeJobRunCompleteAttributesError(t *testing.T) {
 	}()
 
 	// Set GetWorkspaceInfo to return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(ctx context.Context, w DatabricksWorkspace) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -1316,8 +1327,9 @@ func TestPollEvents_MakeJobRunCompleteAttributesError(t *testing.T) {
 }
 
 func TestPollEvents_RunTerminatedBefore(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -1498,8 +1510,9 @@ func TestPollEvents_RunTerminatedBefore(t *testing.T) {
 }
 
 func TestPollEvents_RunTerminatedAfter(t *testing.T) {
-	// Setup mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -1774,8 +1787,9 @@ func TestPollEvents_RunTerminatedAfter(t *testing.T) {
 }
 
 func TestPollEvents_Counters(t *testing.T) {
-	// Setup up mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup up mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -2262,12 +2276,13 @@ func TestPollEvents_Counters(t *testing.T) {
 }
 
 func TestPollEvents_Combined(t *testing.T) {
-	// Setup mock workspace
-	mockWorkspace := setupMockWorkspace()
+	// Setup mock workspace and workspace info
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
+	defer teardown()
 
 	// Setup mock cluster info
-	teardown := setupMockClusterInfo()
-	defer teardown()
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -3465,7 +3480,7 @@ func TestPollEvents_Combined(t *testing.T) {
 
 func TestMakeJobRunSummaryAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock tag map
@@ -3497,6 +3512,7 @@ func TestMakeJobRunSummaryAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunSummaryAttributes, err := makeJobRunSummaryAttributes(
 		context.Background(),
+		mockWorkspace,
 		jobCounters,
 		taskCounters,
 		tags,
@@ -3565,6 +3581,9 @@ func TestMakeJobRunSummaryAttributes(t *testing.T) {
 }
 
 func TestMakeBaseAttributes_GetWorkspaceInfoError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -3576,7 +3595,7 @@ func TestMakeBaseAttributes_GetWorkspaceInfoError(t *testing.T) {
 	}()
 
 	// Set GetWorkspaceInfo to return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(ctx context.Context, w DatabricksWorkspace) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -3598,6 +3617,7 @@ func TestMakeBaseAttributes_GetWorkspaceInfoError(t *testing.T) {
 	// Execute the function under test
 	baseAttributes, err := makeBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		clusterInstance,
 		tags,
 	)
@@ -3610,7 +3630,7 @@ func TestMakeBaseAttributes_GetWorkspaceInfoError(t *testing.T) {
 
 func TestMakeBaseAttributes_GetClusterInfoByIdError(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup expected error message
@@ -3624,8 +3644,12 @@ func TestMakeBaseAttributes_GetClusterInfoByIdError(t *testing.T) {
 	}()
 
 	// Set GetClusterInfoById to return an error
-	GetClusterInfoById = func(ctx context.Context, clusterId string) (
-		*clusterInfo,
+	GetClusterInfoById = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+		clusterId string,
+	) (
+		*ClusterInfo,
 		error,
 	) {
 		return nil, errors.New(expectedError)
@@ -3646,6 +3670,7 @@ func TestMakeBaseAttributes_GetClusterInfoByIdError(t *testing.T) {
 	// Execute the function under test
 	baseAttributes, err := makeBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		clusterInstance,
 		tags,
 	)
@@ -3658,7 +3683,7 @@ func TestMakeBaseAttributes_GetClusterInfoByIdError(t *testing.T) {
 
 func TestMakeBaseAttributes_ClusterInstanceNil(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock tag map
@@ -3670,6 +3695,7 @@ func TestMakeBaseAttributes_ClusterInstanceNil(t *testing.T) {
 	// Execute the function under test
 	baseAttributes, err := makeBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		nil,
 		tags,
 	)
@@ -3713,7 +3739,7 @@ func TestMakeBaseAttributes_ClusterInstanceNil(t *testing.T) {
 
 func TestMakeBaseAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -3735,6 +3761,7 @@ func TestMakeBaseAttributes(t *testing.T) {
 	// Execute the function under test
 	baseAttributes, err := makeBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		clusterInstance,
 		tags,
 	)
@@ -3798,6 +3825,9 @@ func TestMakeBaseAttributes(t *testing.T) {
 }
 
 func TestMakeJobRunBaseAttributes_MakeBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -3810,7 +3840,10 @@ func TestMakeJobRunBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 
 	// Set GetWorkspaceInfo to return an error so that makeBaseAttributes
 	// will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -3861,6 +3894,7 @@ func TestMakeJobRunBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		"start",
 		tags,
@@ -3874,7 +3908,7 @@ func TestMakeJobRunBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 
 func TestMakeJobRunBaseAttributes_JobClusterInstance(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -3919,6 +3953,7 @@ func TestMakeJobRunBaseAttributes_JobClusterInstance(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		"start",
 		tags,
@@ -4040,7 +4075,7 @@ func TestMakeJobRunBaseAttributes_JobClusterInstance(t *testing.T) {
 
 func TestMakeJobRunBaseAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -4081,6 +4116,7 @@ func TestMakeJobRunBaseAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		"start",
 		tags,
@@ -4179,6 +4215,9 @@ func TestMakeJobRunBaseAttributes(t *testing.T) {
 }
 
 func TestMakeJobRunStartAttributes_MakeJobRunBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -4191,7 +4230,10 @@ func TestMakeJobRunStartAttributes_MakeJobRunBaseAttributesError(t *testing.T) {
 
 	// Set GetWorkspaceInfo to return an error so that makeJobRunBaseAttributes
 	// will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -4240,6 +4282,7 @@ func TestMakeJobRunStartAttributes_MakeJobRunBaseAttributesError(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunStartAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		tags,
 	)
@@ -4252,7 +4295,7 @@ func TestMakeJobRunStartAttributes_MakeJobRunBaseAttributesError(t *testing.T) {
 
 func TestMakeJobRunStartAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -4293,6 +4336,7 @@ func TestMakeJobRunStartAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunStartAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		tags,
 	)
@@ -4390,6 +4434,9 @@ func TestMakeJobRunStartAttributes(t *testing.T) {
 }
 
 func TestMakeJobRunCompleteAttributes_MakeJobRunBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -4402,7 +4449,10 @@ func TestMakeJobRunCompleteAttributes_MakeJobRunBaseAttributesError(t *testing.T
 
 	// Set GetWorkspaceInfo to return an error so that makeJobRunBaseAttributes
 	// will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -4453,6 +4503,7 @@ func TestMakeJobRunCompleteAttributes_MakeJobRunBaseAttributesError(t *testing.T
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunCompleteAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		tags,
 	)
@@ -4465,7 +4516,7 @@ func TestMakeJobRunCompleteAttributes_MakeJobRunBaseAttributesError(t *testing.T
 
 func TestMakeJobRunCompleteAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -4516,6 +4567,7 @@ func TestMakeJobRunCompleteAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunCompleteAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		tags,
 	)
@@ -4659,7 +4711,7 @@ func TestMakeJobRunCompleteAttributes(t *testing.T) {
 
 func TestMakeJobRunCompleteAttributes_MultipleTasks(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -4712,6 +4764,7 @@ func TestMakeJobRunCompleteAttributes_MultipleTasks(t *testing.T) {
 	// Execute the function under test
 	jobRunAttributes, err := makeJobRunCompleteAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		tags,
 	)
@@ -4839,6 +4892,9 @@ func TestMakeJobRunCompleteAttributes_MultipleTasks(t *testing.T) {
 }
 
 func TestProcessJobRunTask_MakeJobRunTaskStartAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -4851,7 +4907,10 @@ func TestProcessJobRunTask_MakeJobRunTaskStartAttributesError(t *testing.T) {
 
 	// Set GetWorkspaceInfo to return an error so that makeJobRunTaskStartAttributes
 	// will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -4919,6 +4978,7 @@ func TestProcessJobRunTask_MakeJobRunTaskStartAttributesError(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -4935,6 +4995,9 @@ func TestProcessJobRunTask_MakeJobRunTaskStartAttributesError(t *testing.T) {
 }
 
 func TestProcessJobRunTask_RunStartedBefore(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup mock tag map
 	tags := map[string]string{
 		"env": "production",
@@ -4996,6 +5059,7 @@ func TestProcessJobRunTask_RunStartedBefore(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -5024,7 +5088,7 @@ func TestProcessJobRunTask_RunStartedBefore(t *testing.T) {
 
 func TestProcessJobRunTask_RunStartedAfter(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -5092,6 +5156,7 @@ func TestProcessJobRunTask_RunStartedAfter(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -5256,6 +5321,9 @@ func TestProcessJobRunTask_RunStartedAfter(t *testing.T) {
 }
 
 func TestProcessJobRunTask_MakeJobRunTaskCompleteAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -5268,7 +5336,10 @@ func TestProcessJobRunTask_MakeJobRunTaskCompleteAttributesError(t *testing.T) {
 
 	// Set GetWorkspaceInfo to return an error so that
 	// makeJobRunTaskCompleteAttributes will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -5349,6 +5420,7 @@ func TestProcessJobRunTask_MakeJobRunTaskCompleteAttributesError(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -5365,6 +5437,9 @@ func TestProcessJobRunTask_MakeJobRunTaskCompleteAttributesError(t *testing.T) {
 }
 
 func TestProcessJobRunTask_RunTerminatedBefore(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup mock tag map
 	tags := map[string]string{
 		"env": "production",
@@ -5439,6 +5514,7 @@ func TestProcessJobRunTask_RunTerminatedBefore(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -5467,7 +5543,7 @@ func TestProcessJobRunTask_RunTerminatedBefore(t *testing.T) {
 
 func TestProcessJobRunTask_RunTerminatedAfter(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -5548,6 +5624,7 @@ func TestProcessJobRunTask_RunTerminatedAfter(t *testing.T) {
 	// Execute the function under test
 	err := processJobRunTask(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		lastRunMilli,
@@ -5751,6 +5828,9 @@ func TestProcessJobRunTask_RunTerminatedAfter(t *testing.T) {
 }
 
 func TestMakeJobRunTaskBaseAttributes_MakeBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -5763,7 +5843,10 @@ func TestMakeJobRunTaskBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 
 	// Set GetWorkspaceInfo to return an error so that makeBaseAttributes
 	// will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -5815,6 +5898,7 @@ func TestMakeJobRunTaskBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		"start",
@@ -5829,7 +5913,7 @@ func TestMakeJobRunTaskBaseAttributes_MakeBaseAttributesError(t *testing.T) {
 
 func TestMakeJobRunTaskBaseAttributes_JobClusterInstance(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -5881,6 +5965,7 @@ func TestMakeJobRunTaskBaseAttributes_JobClusterInstance(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		"start",
@@ -6018,7 +6103,7 @@ func TestMakeJobRunTaskBaseAttributes_JobClusterInstance(t *testing.T) {
 
 func TestMakeJobRunTaskBaseAttributes_TaskClusterInstance(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -6074,6 +6159,7 @@ func TestMakeJobRunTaskBaseAttributes_TaskClusterInstance(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		"start",
@@ -6217,7 +6303,7 @@ func TestMakeJobRunTaskBaseAttributes_TaskClusterInstance(t *testing.T) {
 
 func TestMakeJobRunTaskBaseAttributes_NoClusterInstance(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -6265,6 +6351,7 @@ func TestMakeJobRunTaskBaseAttributes_NoClusterInstance(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskBaseAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		"start",
@@ -6384,6 +6471,9 @@ func TestMakeJobRunTaskBaseAttributes_NoClusterInstance(t *testing.T) {
 }
 
 func TestMakeJobRunTaskStartAttributes_MakeJobRunTaskBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -6396,7 +6486,10 @@ func TestMakeJobRunTaskStartAttributes_MakeJobRunTaskBaseAttributesError(t *test
 
 	// Set GetWorkspaceInfo to return an error so that
 	// makeJobRunTaskBaseAttributes will return an error
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -6448,6 +6541,7 @@ func TestMakeJobRunTaskStartAttributes_MakeJobRunTaskBaseAttributesError(t *test
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskStartAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		tags,
@@ -6461,7 +6555,7 @@ func TestMakeJobRunTaskStartAttributes_MakeJobRunTaskBaseAttributesError(t *test
 
 func TestMakeJobRunTaskStartAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -6513,6 +6607,7 @@ func TestMakeJobRunTaskStartAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskStartAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		tags,
@@ -6648,6 +6743,9 @@ func TestMakeJobRunTaskStartAttributes(t *testing.T) {
 }
 
 func TestMakeJobRunTaskCompleteAttributes_MakeJobRunTaskBaseAttributesError(t *testing.T) {
+	// Setup mock workspace
+	mockWorkspace := setupMockWorkspace()
+
 	// Setup expected error message
 	expectedError := "error getting workspace info"
 
@@ -6660,7 +6758,10 @@ func TestMakeJobRunTaskCompleteAttributes_MakeJobRunTaskBaseAttributesError(t *t
 
 	// Set GetWorkspaceInfo to return an error so that
 	// makeJobRunTaskBaseAttributes will return an error.
-	GetWorkspaceInfo = func(ctx context.Context) (
+	GetWorkspaceInfo = func(
+		ctx context.Context,
+		w DatabricksWorkspace,
+	) (
 		*WorkspaceInfo,
 		error,
 	) {
@@ -6722,6 +6823,7 @@ func TestMakeJobRunTaskCompleteAttributes_MakeJobRunTaskBaseAttributesError(t *t
 	// Execute the function under test
 	taskAttributes, err := makeJobRunTaskCompleteAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		tags,
@@ -6735,7 +6837,7 @@ func TestMakeJobRunTaskCompleteAttributes_MakeJobRunTaskBaseAttributesError(t *t
 
 func TestMakeJobRunTaskCompleteAttributes(t *testing.T) {
 	// Setup mock workspace and workspace info
-	_, teardown := setupMockWorkspaceAndInfo()
+	mockWorkspace, teardown := setupMockWorkspaceAndInfo()
 	defer teardown()
 
 	// Setup mock cluster info
@@ -6797,6 +6899,7 @@ func TestMakeJobRunTaskCompleteAttributes(t *testing.T) {
 	// Execute the function under test
 	jobRunTaskAttributes, err := makeJobRunTaskCompleteAttributes(
 		context.Background(),
+		mockWorkspace,
 		run,
 		task,
 		tags,

@@ -21,6 +21,14 @@ type MockWorkspace struct {
     GetCurrentWorkspaceIdFunc                              func(
         ctx context.Context,
     ) (int64, error)
+    GetClusterByIdFunc                                     func(
+        ctx context.Context,
+        clusterId string,
+    ) (*databricksSdkCompute.ClusterDetails, error)
+    GetWarehouseByIdFunc                                   func(
+        ctx context.Context,
+        warehouseId string,
+    ) (*databricksSdkSql.GetWarehouseResponse, error)
     ListClustersFunc                                       func(
         ctx context.Context,
     ) databricksSdkListing.Iterator[databricksSdkCompute.ClusterDetails]
@@ -90,6 +98,28 @@ func (d *MockWorkspace) GetCurrentWorkspaceId(
     }
 
     return d.WorkspaceId, nil
+}
+
+func (d *MockWorkspace) GetClusterById(
+    ctx context.Context,
+    clusterId string,
+) (*databricksSdkCompute.ClusterDetails, error) {
+    if d.GetClusterByIdFunc != nil {
+        return d.GetClusterByIdFunc(ctx, clusterId)
+    }
+
+    return nil, nil
+}
+
+func (d *MockWorkspace) GetWarehouseById(
+    ctx context.Context,
+    warehouseId string,
+) (*databricksSdkSql.GetWarehouseResponse, error) {
+    if d.GetWarehouseByIdFunc != nil {
+        return d.GetWarehouseByIdFunc(ctx, warehouseId)
+    }
+
+    return nil, nil
 }
 
 func (d *MockWorkspace) ListClusters(ctx context.Context) (

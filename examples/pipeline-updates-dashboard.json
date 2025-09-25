@@ -15,7 +15,7 @@
             "width": 4,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -28,7 +28,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'RUNNING'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(runningPipelineCount) AS 'Pipelines'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -44,7 +44,7 @@
             "width": 4,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -57,7 +57,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'FAILED'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(failedPipelineCount) AS 'Pipelines'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -73,7 +73,7 @@
             "width": 4,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -86,7 +86,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.pipelines) AS 'Pipelines'\nWHERE databricksPipelineState = 'IDLE'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(idlePipelineCount) AS 'Pipelines'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -102,7 +102,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -115,7 +115,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'RUNNING'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(runningUpdateCount) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -131,7 +131,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -144,7 +144,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'WAITING_FOR_RESOURCES'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(waitingForResourcesUpdateCount) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -160,7 +160,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -173,7 +173,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT latest(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'SETTING_UP_TABLES'"
+                "query": "FROM DatabricksPipelineSummary \nSELECT latest(settingUpTablesUpdateCount) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}}"
               }
             ],
             "platformOptions": {
@@ -189,7 +189,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -202,7 +202,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'COMPLETED'\nLIMIT MAX"
+                "query": "FROM DatabricksPipelineUpdate\nSELECT count(*) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete' AND status = 'COMPLETED'\nLIMIT MAX"
               }
             ],
             "platformOptions": {
@@ -218,7 +218,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -231,7 +231,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'FAILED'\nLIMIT MAX"
+                "query": "FROM DatabricksPipelineUpdate\nSELECT count(*) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete' AND status = 'FAILED'\nLIMIT MAX"
               }
             ],
             "platformOptions": {
@@ -247,7 +247,7 @@
             "width": 2,
             "height": 2
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.billboard"
           },
@@ -260,7 +260,134 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT sum(databricks.pipeline.updates) AS 'Updates'\nWHERE databricksPipelineUpdateStatus = 'CANCELED'\nLIMIT MAX"
+                "query": "FROM DatabricksPipelineUpdate\nSELECT count(*) AS 'Updates'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete' AND status = 'CANCELED'\nLIMIT MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            }
+          }
+        },
+        {
+          "title": "Update count by workspace",
+          "layout": {
+            "column": 1,
+            "row": 5,
+            "width": 6,
+            "height": 3
+          },
+          "linkedEntityGuids": [],
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "markers": {
+              "displayedTypes": {
+                "criticalViolations": false,
+                "deployments": true,
+                "relatedDeployments": true,
+                "warningViolations": false
+              }
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineUpdate\nSELECT filter(count(*), WHERE event = 'start') AS 'Updates started', filter(count(*), WHERE event = 'complete') AS 'Updates complete'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}}\nFACET workspace \nTIMESERIES\nLIMIT MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "thresholds": {
+              "isLabelVisible": true
+            },
+            "yAxisLeft": {
+              "zero": true
+            },
+            "yAxisRight": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "Average update duration by workspace",
+          "layout": {
+            "column": 7,
+            "row": 5,
+            "width": 6,
+            "height": 3
+          },
+          "linkedEntityGuids": [],
+          "visualization": {
+            "id": "viz.line"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "legend": {
+              "enabled": true
+            },
+            "markers": {
+              "displayedTypes": {
+                "criticalViolations": false,
+                "deployments": true,
+                "relatedDeployments": true,
+                "warningViolations": false
+              }
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineUpdate\nSELECT average(duration) / 1000 AS 'Update duration'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete' \nFACET workspace\nTIMESERIES\nLIMIT MAX"
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
+            },
+            "thresholds": {
+              "isLabelVisible": true
+            },
+            "yAxisLeft": {
+              "zero": true
+            },
+            "yAxisRight": {
+              "zero": true
+            }
+          }
+        },
+        {
+          "title": "Running updates",
+          "layout": {
+            "column": 1,
+            "row": 8,
+            "width": 12,
+            "height": 3
+          },
+          "linkedEntityGuids": [],
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nSELECT count(*)\nFROM (\n FROM DatabricksPipelineUpdate\n SELECT\n  uniqueCount(event) as 'total',\n  latest(event) as 'state'\n FACET databricksWorkspaceName, databricksWorkspaceUrl, databricksPipelineId, pipelineName, databricksPipelineUpdateId, toDatetime(creationTime, 'MMMM dd, YYYY HH:mm:ss') AS creationTime\n ORDER BY max(timestamp)\n LIMIT 100)\nWHERE total = 1 AND state = 'start'\nFACET workspace AS Workspace, pipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) as Update, creationTime AS 'Update Creation Time', databricksPipelineUpdateUrl AS 'Databricks Link'\nLIMIT 100"
               }
             ],
             "platformOptions": {
@@ -272,11 +399,11 @@
           "title": "Recent updates",
           "layout": {
             "column": 1,
-            "row": 5,
+            "row": 11,
             "width": 12,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -295,7 +422,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineUpdateStatus as Status, getField(databricks.pipeline.update.duration, latest) / 1000 AS Duration\nWHERE databricks.pipeline.update.duration IS NOT NULL\n AND databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nLIMIT MAX "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) AS update,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nFROM DatabricksPipelineUpdate\nSELECT workspace,\n databricksClusterName AS Cluster,\n pipelineName AS Pipeline,\n update,\n creationTime,\n completionTime,\n status,\n duration / 1000 AS Duration,\n databricksPipelineUpdateUrl AS 'Databricks Link'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nLIMIT 100"
               }
             ],
             "platformOptions": {
@@ -304,14 +431,14 @@
           }
         },
         {
-          "title": "Average update duration by pipeline and status",
+          "title": "Average update duration by workspace and pipeline",
           "layout": {
             "column": 1,
-            "row": 8,
+            "row": 14,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -335,7 +462,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.update.duration) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineUpdate \nSELECT average(duration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -356,14 +483,14 @@
           }
         },
         {
-          "title": "Average update wait time by pipeline and status",
+          "title": "Average update wait duration by workspace and pipeline",
           "layout": {
             "column": 5,
-            "row": 8,
+            "row": 14,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -387,7 +514,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.update.duration.wait) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineUpdate\nSELECT average(waitDuration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -408,14 +535,14 @@
           }
         },
         {
-          "title": "Average update run time by pipeline and status",
+          "title": "Average update run duration by workspace and pipeline",
           "layout": {
             "column": 9,
-            "row": 8,
+            "row": 14,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -439,7 +566,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.update.runTime) / 1000 AS 'seconds'\nWHERE databricksPipelineUpdateStatus IN ('COMPLETED', 'CANCELED', 'FAILED')\nFACET databricksPipelineName, databricksPipelineUpdateStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineUpdate \nSELECT average(runDuration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -456,6 +583,35 @@
             },
             "yAxisRight": {
               "zero": true
+            }
+          }
+        },
+        {
+          "title": "Running flows",
+          "layout": {
+            "column": 1,
+            "row": 17,
+            "width": 12,
+            "height": 3
+          },
+          "linkedEntityGuids": [],
+          "visualization": {
+            "id": "viz.table"
+          },
+          "rawConfiguration": {
+            "facet": {
+              "showOtherSeries": false
+            },
+            "nrqlQueries": [
+              {
+                "accountIds": [
+                  0
+                ],
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n  concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nSELECT count(*)\nFROM (\n FROM DatabricksPipelineFlow\n SELECT\n  uniqueCount(event) as 'total',\n  latest(event) as 'state'\n FACET databricksWorkspaceName, databricksWorkspaceUrl, databricksPipelineId, pipelineName, databricksPipelineUpdateId, databricksPipelineFlowName, toDatetime(queueStartTime, 'MMMM dd, YYYY HH:mm:ss') AS queueStartTime\n ORDER BY max(timestamp)\n LIMIT 100)\nWHERE total = 1 AND state = 'start'\nFACET workspace AS Workspace, pipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) as Update, databricksPipelineFlowName AS Flow, queueStartTime AS 'Queue Start Time', databricksPipelineUpdateUrl AS 'Databricks Link'\nLIMIT 100 "
+              }
+            ],
+            "platformOptions": {
+              "ignoreTimeRange": false
             }
           }
         },
@@ -463,11 +619,11 @@
           "title": "Recent flows",
           "layout": {
             "column": 1,
-            "row": 11,
+            "row": 20,
             "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -486,7 +642,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowStatus AS Status, getField(databricks.pipeline.flow.duration, latest) / 1000 AS Duration\nWHERE databricks.pipeline.flow.duration IS NOT NULL\n AND databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nLIMIT MAX\n"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) AS update,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nFROM DatabricksPipelineFlow\nSELECT workspace,\n databricksClusterName AS Cluster,\n pipelineName AS Pipeline,\n update,\n databricksPipelineFlowName AS Flow,\n queueStartTime,\n completionTime,\n status,\n duration / 1000 AS Duration,\n databricksPipelineUpdateUrl AS 'Databricks Link'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nLIMIT 100"
               }
             ],
             "platformOptions": {
@@ -495,14 +651,14 @@
           }
         },
         {
-          "title": "Average flow duration by pipeline, flow, and status",
+          "title": "Average flow duration by workspace, pipeline, and flow",
           "layout": {
             "column": 1,
-            "row": 15,
+            "row": 24,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -526,7 +682,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow \nSELECT average(duration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -547,14 +703,14 @@
           }
         },
         {
-          "title": "Average flow queue time by pipeline, flow, and status",
+          "title": "Average flow queue duration by workspace, pipeline, and flow",
           "layout": {
             "column": 5,
-            "row": 15,
+            "row": 24,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -578,7 +734,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration.queue) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow \nSELECT average(queueDuration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -599,14 +755,14 @@
           }
         },
         {
-          "title": "Average flow planning time by pipeline, flow, and status",
+          "title": "Average flow plan duration by workspace, pipeline, and flow",
           "layout": {
             "column": 9,
-            "row": 15,
+            "row": 24,
             "width": 4,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.line"
           },
@@ -630,7 +786,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.duration.plan) / 1000 AS 'seconds'\nWHERE databricksPipelineFlowStatus IN ('COMPLETED', 'STOPPED', 'SKIPPED', 'FAILED', 'EXCLUDED')\nFACET databricksPipelineName, databricksPipelineFlowName, databricksPipelineFlowStatus\nTIMESERIES"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow\nSELECT average(planDuration) / 1000 AS 'seconds'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName\nTIMESERIES"
               }
             ],
             "platformOptions": {
@@ -651,14 +807,14 @@
           }
         },
         {
-          "title": "Average records written by pipeline and flow",
+          "title": "Average rows written by workspace, pipeline, and flow",
           "layout": {
             "column": 1,
-            "row": 22,
+            "row": 27,
             "width": 6,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.bar"
           },
@@ -671,7 +827,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.rowsWritten)\nFACET databricksPipelineName, databricksPipelineFlowName"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow\nSELECT average(outputRowCount)\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName"
               }
             ],
             "platformOptions": {
@@ -680,14 +836,14 @@
           }
         },
         {
-          "title": "Average records dropped by pipeline and flow",
+          "title": "Average records dropped by workspace, pipeline, and flow",
           "layout": {
             "column": 7,
-            "row": 22,
+            "row": 27,
             "width": 6,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.bar"
           },
@@ -700,7 +856,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.recordsDropped)\nFACET databricksPipelineName, databricksPipelineFlowName"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow\nSELECT average(droppedRecordCount)\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName"
               }
             ],
             "platformOptions": {
@@ -709,14 +865,14 @@
           }
         },
         {
-          "title": "Average backlog bytes by pipeline and flow",
+          "title": "Average backlog bytes by workspace, pipeline, and flow",
           "layout": {
             "column": 1,
-            "row": 25,
+            "row": 30,
             "width": 6,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.bar"
           },
@@ -729,7 +885,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.backlogBytes)\nFACET databricksPipelineName, databricksPipelineFlowName"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow\nSELECT average(backlogBytes)\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName"
               }
             ],
             "platformOptions": {
@@ -738,14 +894,14 @@
           }
         },
         {
-          "title": "Average backlog files by pipeline and flow",
+          "title": "Average backlog files by workspace, pipeline, and flow",
           "layout": {
             "column": 7,
-            "row": 25,
+            "row": 30,
             "width": 6,
             "height": 3
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.bar"
           },
@@ -758,7 +914,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT average(databricks.pipeline.flow.backlogFiles)\nFACET databricksPipelineName, databricksPipelineFlowName"
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace\nFROM DatabricksPipelineFlow\nSELECT average(backlogFileCount)\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND event = 'complete'\nFACET workspace, pipelineName, databricksPipelineFlowName"
               }
             ],
             "platformOptions": {
@@ -770,11 +926,11 @@
           "title": "Expectation records passed",
           "layout": {
             "column": 1,
-            "row": 28,
-            "width": 6,
+            "row": 33,
+            "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -793,7 +949,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowExpectationName AS Expectation, getField(databricks.pipeline.flow.expectation.recordsPassed, latest) AS Records\nWHERE databricks.pipeline.flow.expectation.recordsPassed IS NOT NULL\nLIMIT MAX\n "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) AS update\nFROM DatabricksPipelineFlowExpectation\nSELECT workspace, databricksClusterName AS cluster, pipelineName AS Pipeline, update, databricksPipelineFlowName AS Flow, name AS Expectation, dataset, passedRecordCount AS Records\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND failedRecordCount = 0\nLIMIT MAX\n "
               }
             ],
             "platformOptions": {
@@ -804,12 +960,12 @@
         {
           "title": "Expectation records failed",
           "layout": {
-            "column": 7,
-            "row": 28,
-            "width": 6,
+            "column": 1,
+            "row": 37,
+            "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -828,7 +984,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "FROM Metric\nSELECT databricksPipelineName AS Pipeline, substring(databricksPipelineUpdateId, 0, 6) AS Update, databricksPipelineFlowName AS Flow, databricksPipelineFlowExpectationName AS Expectation, getField(databricks.pipeline.flow.expectation.recordsFailed, latest) AS Records\nWHERE databricks.pipeline.flow.expectation.recordsFailed IS NOT NULL\nLIMIT MAX\n "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) AS update\nFROM DatabricksPipelineFlowExpectation\nSELECT workspace, databricksClusterName AS Cluster, pipelineName AS Pipeline, update, databricksPipelineFlowName AS Flow, name AS Expectation, dataset, failedRecordCount AS Records\nWHERE databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}} AND failedRecordCount > 0\nLIMIT MAX\n "
               }
             ],
             "platformOptions": {
@@ -843,30 +999,14 @@
       "description": null,
       "widgets": [
         {
-          "title": "",
+          "title": "Spark jobs by pipeline update",
           "layout": {
             "column": 1,
             "row": 1,
-            "width": 2,
+            "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
-          "visualization": {
-            "id": "viz.markdown"
-          },
-          "rawConfiguration": {
-            "text": "## Important Notes\n* The charts on this page will populate only if the Databricks Integration is able to [map Spark metrics to pipeline data](https://github.com/newrelic/newrelic-databricks-integration?tab=readme-ov-file#mapping-spark-metrics-to-databricks-jobs-and-pipelines) and the [`includePipelineUpdateId`](https://github.com/newrelic/newrelic-databricks-integration?tab=readme-ov-file#spark-databricks-includepipelineupdateid) configuration parameter is set to `true`.\n* Click on the links in the \"Databricks Link\" column to navigate to the associated pipeline update in the Databricks UI."
-          }
-        },
-        {
-          "title": "Spark jobs by pipeline update",
-          "layout": {
-            "column": 3,
-            "row": 1,
-            "width": 10,
-            "height": 4
-          },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -891,7 +1031,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppJobId AS 'Spark Job ID',\n getField(spark.app.job.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.job.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) as update,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nFROM SparkJob\nSELECT\n workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n description AS 'Job Description',\n jobId AS 'Spark Job ID',\n duration / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUpdateUrl AS 'Databricks Link'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}} AND event = 'complete' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
               }
             ],
             "platformOptions": {
@@ -907,7 +1047,7 @@
             "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -932,7 +1072,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppStageName AS 'Spark Stage Name',\n getField(spark.app.stage.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.stage.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) as update,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nFROM SparkStage\nSELECT\n workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n stageId AS 'Spark Stage ID',\n duration / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUpdateUrl AS 'Databricks Link'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}} AND event = 'complete' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
               }
             ],
             "platformOptions": {
@@ -948,7 +1088,7 @@
             "width": 12,
             "height": 4
           },
-          "linkedEntityGuids": null,
+          "linkedEntityGuids": [],
           "visualization": {
             "id": "viz.table"
           },
@@ -973,7 +1113,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId) AS databricksPipelineUrl,\n substring(databricksPipelineUpdateId, 0, 6) as update\nFROM Metric\nSELECT\n databricksWorkspaceName AS Workspace,\n sparkAppName AS 'Spark App Name',\n sparkAppStageName AS 'Spark Stage Name',\n sparkAppTaskId AS 'Spark Task ID',\n getField(spark.app.stage.task.duration, latest) / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUrl AS 'Databricks Link'\nWHERE metricName = 'spark.app.stage.task.duration' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
+                "query": "WITH\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS workspace,\n substring(databricksPipelineUpdateId, 0, 6) as update,\n concat(databricksWorkspaceUrl, '/pipelines/', databricksPipelineId, '/updates/', databricksPipelineUpdateId) AS databricksPipelineUpdateUrl\nFROM SparkTask\nSELECT\n workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n taskId AS 'Spark Task ID',\n duration / 1000 AS Duration,\n databricksPipelineId AS 'Pipeline ID',\n update as 'Update',\n databricksPipelineUpdateUrl AS 'Databricks Link'\nWHERE databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}} AND event = 'complete' AND databricksPipelineId IS NOT NULL AND databricksPipelineUpdateId IS NOT NULL\nLIMIT MAX "
               }
             ],
             "platformOptions": {
@@ -984,5 +1124,44 @@
       ]
     }
   ],
-  "variables": []
+  "variables": [
+    {
+      "name": "workspace",
+      "items": null,
+      "defaultValues": [],
+      "nrqlQuery": {
+        "accountIds": [
+          0
+        ],
+        "query": "FROM DatabricksPipelineSummary\nSELECT uniques(databricksWorkspaceName)"
+      },
+      "options": {
+        "ignoreTimeRange": true,
+        "excluded": true
+      },
+      "title": "Workspace",
+      "type": "NRQL",
+      "isMultiSelection": false,
+      "replacementStrategy": "STRING"
+    },
+    {
+      "name": "cluster",
+      "items": null,
+      "defaultValues": [],
+      "nrqlQuery": {
+        "accountIds": [
+          0
+        ],
+        "query": "FROM DatabricksPipelineUpdate SELECT uniques(databricksClusterName)"
+      },
+      "options": {
+        "ignoreTimeRange": true,
+        "excluded": true
+      },
+      "title": "Cluster",
+      "type": "NRQL",
+      "isMultiSelection": false,
+      "replacementStrategy": "STRING"
+    }
+  ]
 }

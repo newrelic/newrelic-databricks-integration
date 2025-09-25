@@ -148,7 +148,7 @@ func runQuery(
 	var workspaceInfo *WorkspaceInfo
 
 	if query.includeWorkspaceInfo {
-		workspaceInfo, err = GetWorkspaceInfo(ctx)
+		workspaceInfo, err = GetWorkspaceInfo(ctx, w)
 		if err != nil {
 			return err
 		}
@@ -249,6 +249,7 @@ func runQuery(
 			case CLUSTER_ID_ATTRIBUTE_TYPE:
 				ok = columnToClusterInfo(
 					ctx,
+					w,
 					attrs,
 					attrName,
 					col,
@@ -260,6 +261,7 @@ func runQuery(
 			case WAREHOUSE_ID_ATTRIBUTE_TYPE:
 				ok = columnToWarehouseInfo(
 					ctx,
+					w,
 					attrs,
 					attrName,
 					col,
@@ -414,6 +416,7 @@ func columnToTags(
 
 func columnToClusterInfo(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	attrs map[string]interface{},
 	attrName string,
 	col string,
@@ -427,8 +430,9 @@ func columnToClusterInfo(
 
 	attrs[attrName] = col
 
-	clusterInfo, err := getClusterInfoById(
+	clusterInfo, err := GetClusterInfoById(
 		ctx,
+		w,
 		col,
 	)
 	if err != nil {
@@ -449,15 +453,15 @@ func columnToClusterInfo(
 			rowIndex,
 		)
 	} else {
-		attrs["cluster_name"] = clusterInfo.name
+		attrs["cluster_name"] = clusterInfo.Name
 
 		if includeIdentityMetadata {
-			attrs["cluster_single_user_name"] = clusterInfo.singleUserName
-			attrs["cluster_creator"] = clusterInfo.creator
+			attrs["cluster_single_user_name"] = clusterInfo.SingleUserName
+			attrs["cluster_creator"] = clusterInfo.Creator
 		}
 
-		attrs["cluster_source"] = clusterInfo.source
-		attrs["cluster_instance_pool_id"] = clusterInfo.instancePoolId
+		attrs["cluster_source"] = clusterInfo.Source
+		attrs["cluster_instance_pool_id"] = clusterInfo.InstancePoolId
 	}
 
 	// unresolved cluster id is not considered a failure
@@ -468,6 +472,7 @@ func columnToClusterInfo(
 
 func columnToWarehouseInfo(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	attrs map[string]interface{},
 	attrName string,
 	col string,
@@ -481,8 +486,9 @@ func columnToWarehouseInfo(
 
 	attrs[attrName] = col
 
-	warehouseInfo, err := getWarehouseInfoById(
+	warehouseInfo, err := GetWarehouseInfoById(
 		ctx,
+		w,
 		col,
 	)
 	if err != nil {
@@ -503,10 +509,10 @@ func columnToWarehouseInfo(
 			rowIndex,
 		)
 	} else {
-		attrs["warehouse_name"] = warehouseInfo.name
+		attrs["warehouse_name"] = warehouseInfo.Name
 
 		if includeIdentityMetadata {
-			attrs["warehouse_creator"] = warehouseInfo.creator
+			attrs["warehouse_creator"] = warehouseInfo.Creator
 		}
 	}
 

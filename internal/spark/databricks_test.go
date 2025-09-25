@@ -207,7 +207,10 @@ func TestNewDatabricksSparkEventDecorator_GetWorkspaceInfoError(t *testing.T) {
 
 
 	// Setup GetWorkspaceInfo to return an error
-    databricks.GetWorkspaceInfo = func(ctx context.Context) (
+    databricks.GetWorkspaceInfo = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+	) (
         *databricks.WorkspaceInfo,
         error,
     ) {

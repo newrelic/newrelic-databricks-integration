@@ -33,8 +33,6 @@ func NewDatabricksJobRunReceiver(
 	startOffset time.Duration,
 	tags map[string]string,
 ) *DatabricksJobRunReceiver {
-	InitInfoByIdCaches(w)
-
 	return &DatabricksJobRunReceiver{
 		i,
 		w,
@@ -122,7 +120,7 @@ func (d *DatabricksJobRunReceiver) PollEvents(
 				)
 			}
 
-			attrs, err := makeJobRunStartAttributes(ctx, &run, d.tags)
+			attrs, err := makeJobRunStartAttributes(ctx, d.w, &run, d.tags)
 			if err != nil {
 				return err
 			}
@@ -143,7 +141,7 @@ func (d *DatabricksJobRunReceiver) PollEvents(
 				)
 			}
 
-			attrs, err := makeJobRunCompleteAttributes(ctx, &run, d.tags)
+			attrs, err := makeJobRunCompleteAttributes(ctx, d.w, &run, d.tags)
 			if err != nil {
 				return err
 			}
@@ -168,6 +166,7 @@ func (d *DatabricksJobRunReceiver) PollEvents(
 
 			err := processJobRunTask(
 				ctx,
+				d.w,
 				&run,
 				&task,
 				lastRunMilli,
@@ -184,6 +183,7 @@ func (d *DatabricksJobRunReceiver) PollEvents(
 
 	attrs, err := makeJobRunSummaryAttributes(
 		ctx,
+		d.w,
 		&jobRunCounters,
 		&taskRunCounters,
 		d.tags,
@@ -203,11 +203,12 @@ func (d *DatabricksJobRunReceiver) PollEvents(
 
 func makeJobRunSummaryAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	jobRunCounters *counters,
 	taskRunCounters *counters,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	attrs, err := makeBaseAttributes(ctx, nil, tags)
+	attrs, err := makeBaseAttributes(ctx, w, nil, tags)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +231,12 @@ func makeJobRunSummaryAttributes(
 
 func makeJobRunBaseAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	event string,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	attrs, err := makeBaseAttributes(ctx, run.ClusterInstance, tags)
+	attrs, err := makeBaseAttributes(ctx, w, run.ClusterInstance, tags)
 	if err != nil {
 		return nil, err
 	}
@@ -256,18 +258,20 @@ func makeJobRunBaseAttributes(
 
 func makeJobRunStartAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	return makeJobRunBaseAttributes(ctx, run, "start", tags)
+	return makeJobRunBaseAttributes(ctx, w, run, "start", tags)
 }
 
 func makeJobRunCompleteAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	attrs, err := makeJobRunBaseAttributes(ctx, run, "complete", tags)
+	attrs, err := makeJobRunBaseAttributes(ctx, w, run, "complete", tags)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +307,7 @@ func makeJobRunCompleteAttributes(
 
 func processJobRunTask(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	task *databricksSdkJobs.RunTask,
 	lastRunMilli int64,
@@ -339,7 +344,7 @@ func processJobRunTask(
 			)
 		}
 
-		attrs, err := makeJobRunTaskStartAttributes(ctx, run, task, tags)
+		attrs, err := makeJobRunTaskStartAttributes(ctx, w, run, task, tags)
 		if err != nil {
 			return err
 		}
@@ -360,7 +365,7 @@ func processJobRunTask(
 			)
 		}
 
-		attrs, err := makeJobRunTaskCompleteAttributes(ctx, run, task, tags)
+		attrs, err := makeJobRunTaskCompleteAttributes(ctx, w, run, task, tags)
 		if err != nil {
 			return err
 		}
@@ -377,6 +382,7 @@ func processJobRunTask(
 
 func makeJobRunTaskBaseAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	task *databricksSdkJobs.RunTask,
 	event string,
@@ -387,7 +393,7 @@ func makeJobRunTaskBaseAttributes(
 		clusterInstance = run.ClusterInstance
 	}
 
-	attrs, err := makeBaseAttributes(ctx, clusterInstance, tags)
+	attrs, err := makeBaseAttributes(ctx, w, clusterInstance, tags)
 	if err != nil {
 		return nil, err
 	}
@@ -411,20 +417,22 @@ func makeJobRunTaskBaseAttributes(
 
 func makeJobRunTaskStartAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	task *databricksSdkJobs.RunTask,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	return makeJobRunTaskBaseAttributes(ctx, run, task, "start", tags)
+	return makeJobRunTaskBaseAttributes(ctx, w, run, task, "start", tags)
 }
 
 func makeJobRunTaskCompleteAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	run *databricksSdkJobs.BaseRun,
 	task *databricksSdkJobs.RunTask,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
-	attrs, err := makeJobRunTaskBaseAttributes(ctx, run, task, "complete", tags)
+	attrs, err := makeJobRunTaskBaseAttributes(ctx, w, run, task, "complete", tags)
 	if err != nil {
 		return nil, err
 	}
@@ -474,12 +482,13 @@ func makeJobRunTaskCompleteAttributes(
 
 func makeBaseAttributes(
 	ctx context.Context,
+	w DatabricksWorkspace,
 	clusterInstance *databricksSdkJobs.ClusterInstance,
 	tags map[string]string,
 ) (map[string]interface{}, error) {
 	attrs := makeAttributesMap(tags)
 
-	workspaceInfo, err := GetWorkspaceInfo(ctx)
+	workspaceInfo, err := GetWorkspaceInfo(ctx, w)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +500,7 @@ func makeBaseAttributes(
 	if clusterInstance != nil {
 		clusterInfo, err := GetClusterInfoById(
 			ctx,
+			w,
 			clusterInstance.ClusterId,
 		)
 		if err != nil {
@@ -498,9 +508,9 @@ func makeBaseAttributes(
 		}
 
 		attrs["databricksClusterId"] = clusterInstance.ClusterId
-		attrs["databricksClusterName"] = clusterInfo.name
-		attrs["databricksClusterSource"] = clusterInfo.source
-		attrs["databricksClusterInstancePoolId"] = clusterInfo.instancePoolId
+		attrs["databricksClusterName"] = clusterInfo.Name
+		attrs["databricksClusterSource"] = clusterInfo.Source
+		attrs["databricksClusterInstancePoolId"] = clusterInfo.InstancePoolId
 		attrs["databricksClusterSparkContextId"] =
 			clusterInstance.SparkContextId
 	}

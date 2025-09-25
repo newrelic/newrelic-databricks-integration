@@ -17,6 +17,9 @@ func InitPipelines(
 	i *integration.LabsIntegration,
 	tags map[string]string,
 ) error {
+	// Initialize caches
+	InitCaches()
+
 	// Create a workspace client
 	w, err := NewDatabricksWorkspace()
 	if err != nil {
@@ -40,9 +43,6 @@ func InitPipelines(
 	}
 
 	if collectUsageData {
-		// Initialize caches
-		InitInfoByIdCaches(w)
-
 		// We need a sql warehouse ID to run the SQL queries
 		warehouseId := viper.GetString("databricks.usage.warehouseId")
 		if warehouseId == "" {
@@ -193,22 +193,17 @@ func InitPipelines(
 			)
 		}
 
-		databricksPipelineMetricsReceiver, err :=
+		databricksPipelineMetricsReceiver :=
 			NewDatabricksPipelineMetricsReceiver(
 				i,
 				w,
-				viper.GetString("databricks.pipelines.metrics.metricPrefix"),
 				time.Duration(startOffset) * time.Second,
 				time.Duration(intervalOffset) * time.Second,
-				viper.GetBool("databricks.pipelines.metrics.includeUpdateId"),
 				tags,
 			)
-		if err != nil {
-			return err
-		}
 
-		// Create a metrics pipeline for the pipeline metrics
-		mp := pipeline.NewMetricsPipeline(
+		// Create an events pipeline for the pipeline metrics
+		mp := pipeline.NewEventsPipeline(
 			"databricks-pipeline-metrics-pipeline",
 		)
 		mp.AddReceiver(databricksPipelineMetricsReceiver)
@@ -227,9 +222,6 @@ func InitPipelines(
 	}
 
 	if collectQueryMetrics {
-		// Initialize caches so we can lookup warehouse names for queries
-		InitInfoByIdCaches(w)
-
 		// @todo: at some point, all the checks like this should be converted
 		// to use viper.SetDefault(). Then the IsSet() is not necessary. For
 		// now, we will leave it as is as we don't gain much by changing. Also,
