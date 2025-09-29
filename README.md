@@ -121,6 +121,8 @@ to add the following environment variables.
 * `NEW_RELIC_ACCOUNT_ID` - Your [New Relic Account ID](https://docs.newrelic.com/docs/accounts/accounts-billing/account-structure/account-id/)
 * `NEW_RELIC_REGION` - The [region](https://docs.newrelic.com/docs/accounts/accounts-billing/account-setup/choose-your-data-center/#regions-availability)
    of your New Relic account; one of `US` or `EU`
+* `NEW_RELIC_DATABRICKS_LOG_LEVEL` - The [log level](#level) for the
+   integration. Defaults to `warn`.
 * `NEW_RELIC_DATABRICKS_WORKSPACE_HOST` - The [instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids)
    of the target Databricks instance
 * `NEW_RELIC_DATABRICKS_ACCESS_TOKEN` - To [authenticate](#authentication) with
@@ -179,6 +181,11 @@ to add the following environment variables.
   in the Databricks documentation.
 * Make sure to restart the cluster following the configuration of the
   environment variables.
+* Log messages for the integration are reported to New Relic using
+  [APM logs in context](https://docs.newrelic.com/docs/logs/logs-context/get-started-logs-context/).
+  and can be accessed via the APM UI for the entity named
+  "New Relic Databricks Integration" or via the [New Relic Logs UI](https://docs.newrelic.com/docs/logs/ui-data/use-logs-ui/)
+  using the query `entity.name:"New Relic Databricks Integration"`.
 
 #### Deploy the integration on a host outside a Databricks cluster
 
