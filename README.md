@@ -16,22 +16,32 @@
 
 # Databricks Integration
 
-The Databricks Integration is a standalone application that collects telemetry from the Databricks Data
-Intelligence Platform, to be used in troubleshooting and optimizing Databricks workloads.
+The Databricks Integration is a standalone application that collects telemetry
+from the Databricks Data Intelligence Platform, to be used in troubleshooting
+and optimizing Databricks workloads.
 
 The integration collects the following types of telemetry:
 
--   Apache Spark application metrics, such as Spark executor memory and cpu metrics, durations and I/O metrics of Spark jobs, stages, and tasks, and Spark RDD memory and disk metrics
--   Databricks Lakeflow job run metrics, such as durations, start and end times, and termination codes and types for job and task runs.
--   Databricks Lakeflow Declarative Pipeline update metrics, such as durations, start and end times, and completion status for updates and flows.
+-   Apache Spark application metrics, such as Spark executor memory and cpu
+    metrics, durations and I/O metrics of Spark jobs, stages, and tasks, and Spark
+    RDD memory and disk metrics
+-   Databricks Lakeflow job run metrics, such as durations, start and end times,
+    and termination codes and types for job and task runs.
+-   Databricks Lakeflow Declarative Pipeline update metrics, such as durations,
+    start and end times, and completion status for updates and flows.
 -   Databricks Lakeflow Declarative Pipeline event logs
--   Databricks query metrics, including execution times, query statuses, and query I/O metrics.
--   Databricks cluster health metrics and logs, such as driver and worker memory and cpu metrics and driver and executor logs.
--   Databricks consumption and cost data, DBU consumption metrics and estimated Databricks costs.
+-   Databricks query metrics, including execution times, query statuses, and
+    query I/O metrics.
+-   Databricks cluster health metrics and logs, such as driver and worker memory
+    and cpu metrics and driver and executor logs.
+-   Databricks consumption and cost data, DBU consumption metrics and estimated
+    Databricks costs.
 
 ## Usage Guide
 
-To get up and running quickly, refer to the [Getting Started](#getting-started) section; for comprehensive usage details, review the additional sections linked below.
+To get up and running quickly, refer to the [Getting Started](#getting-started)
+section; for comprehensive usage details, review the additional sections linked
+below.
 
 -   [Getting Started](#getting-started)
 -   [Installation](./docs/installation.md)
@@ -59,19 +69,22 @@ Follow the steps to [deploy the integration to a Databricks cluster](./docs/inst
 
 **2. Verify the installation**
 
-Once the Databricks Integration has run for a few minutes, use the [query builder](https://one.newrelic.com/data-exploration/query-builder) in New Relic to run the following query (replace `[YOUR_CLUSTER_NAME]` with the _name_ of the Databricks cluster _where the integration was installed_):
+Once the Databricks Integration has run for a few minutes, use the
+[query builder](https://one.newrelic.com/data-exploration/query-builder) in New
+Relic to run the following query (replace `[YOUR_CLUSTER_NAME]` with the _name_
+of the Databricks cluster _where the integration was installed_):
 
 `SELECT uniqueCount(executorId) AS Executors FROM SparkExecutorSample WHERE databricksclustername = '[YOUR_CLUSTER_NAME]'`
 
 The result of the query should be **a number greater than zero**.
 
-[TODO: troubleshooting if no data]
-
 **3. Import the example dashboards (optional)**
 
-To help you get started using the collected telemetry, [example dashboards](./examples/) have been provided that can be imported into New Relic.
+To help you get started using the collected telemetry, [example dashboards](./examples/)
+have been provided that can be imported into New Relic.
 
-To use these dashboards, follow the instructions found in [Import the Example Dashboards](./docs/example-dashboards.md).
+To use these dashboards, follow the instructions found in
+[Import the Example Dashboards](./docs/example-dashboards.md).
 
 ## Support
 
@@ -108,7 +121,9 @@ If you have any questions, or to execute our corporate CLA (which is required
 if your contribution is on behalf of a company), drop us an email at
 opensource@newrelic.com.
 
-If you would like to contribute to this project, please review the standards outlined in [Contribute to the Integration](./docs/contribute.md), as well as [these guidelines](./CONTRIBUTING.md).
+If you would like to contribute to this project, please review the standards
+outlined in [Contribute to the Integration](./docs/contribute.md), as well as
+[these guidelines](./CONTRIBUTING.md).
 
 **A note about vulnerabilities**
 
@@ -117,7 +132,9 @@ to the privacy and security of our customers and their data. We believe that
 providing coordinated disclosure by security researchers and engaging with the
 security community are important means to achieve our security goals.
 
-If you believe you have found a security vulnerability in this project or any of New Relic's products or websites, we welcome and greatly appreciate you reporting it to New Relic through [our bug bounty program](https://docs.newrelic.com/docs/security/security-privacy/information-security/report-security-vulnerabilities/).
+If you believe you have found a security vulnerability in this project or any of
+New Relic's products or websites, we welcome and greatly appreciate you reporting
+it to New Relic through [our bug bounty program](https://docs.newrelic.com/docs/security/security-privacy/information-security/report-security-vulnerabilities/).
 
 ### License
 

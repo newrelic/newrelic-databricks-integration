@@ -1,6 +1,7 @@
 # Contribute to the Integration
 
-Contributions are very welcome! Please review [the contribution guidelines](../CONTRIBUTING.md), as well as the standards used by this project described below.
+Contributions are very welcome! Please review [the contribution guidelines](../CONTRIBUTING.md),
+as well as the standards used by this project described below.
 
 ## Coding Conventions
 
