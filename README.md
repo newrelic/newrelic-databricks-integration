@@ -34,8 +34,8 @@ The integration collects the following types of telemetry:
     query I/O metrics.
 -   Databricks cluster health metrics and logs, such as driver and worker memory
     and cpu metrics and driver and executor logs.
--   Databricks consumption and cost data, DBU consumption metrics and estimated
-    Databricks costs.
+-   Databricks consumption and cost data that can be used to show DBU consumption
+    and estimated Databricks costs.
 
 ## Usage Guide
 
