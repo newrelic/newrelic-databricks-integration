@@ -32,8 +32,8 @@ custom_attributes:
   databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   databricksClusterId: $DB_CLUSTER_ID
   databricksClusterName: $DB_CLUSTER_NAME
-  databricksIsDriverNode: $DB_IS_DRIVER
-  databricksIsJobCluster: $DB_IS_JOB_CLUSTER
+  databricksIsDriverNode: ${DB_IS_DRIVER,,}
+  databricksIsJobCluster: ${DB_IS_JOB_CLUSTER,,}
 EOM
 
   if [ "$NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED" = "true" ]; then
@@ -105,6 +105,15 @@ EOM
     Buffer_Max_Size 512k
     Mem_Buf_Limit 16384k
     Skip_Long_Lines On
+
+[FILTER]
+    Name record_modifier
+    Match *
+    Record databricksWorkspaceHost $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+    Record databricksClusterId $DB_CLUSTER_ID
+    Record databricksClusterName $DB_CLUSTER_NAME
+    Record databricksIsDriverNode ${DB_IS_DRIVER,,}
+    Record databricksIsJobCluster ${DB_IS_JOB_CLUSTER,,}
 
 [FILTER]
     Name record_modifier
@@ -217,6 +226,15 @@ EOM
     Buffer_Max_Size 128k
     Mem_Buf_Limit 16384k
     Skip_Long_Lines On
+
+[FILTER]
+    Name record_modifier
+    Match *
+    Record databricksWorkspaceHost $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+    Record databricksClusterId $DB_CLUSTER_ID
+    Record databricksClusterName $DB_CLUSTER_NAME
+    Record databricksIsDriverNode ${DB_IS_DRIVER,,}
+    Record databricksIsJobCluster ${DB_IS_JOB_CLUSTER,,}
 
 [FILTER]
     Name record_modifier
