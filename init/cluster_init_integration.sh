@@ -7,6 +7,8 @@ if [ "$NEW_RELIC_INFRASTRUCTURE_ENABLED" = "true" ]; then
   NEW_RELIC_INFRA_CONFIG_FILE="/etc/newrelic-infra.yml"
   NEW_RELIC_INFRA_DATABRICKS_DIR="/databricks/driver/newrelic-infra"
 
+  echo "Installing New Relic Infrastructure..."
+
   mkdir -p $NEW_RELIC_INFRA_DATABRICKS_DIR
 
   # Add New Relic's Infrastructure Agent gpg key
@@ -22,6 +24,8 @@ if [ "$NEW_RELIC_INFRASTRUCTURE_ENABLED" = "true" ]; then
   sudo apt-get install newrelic-infra -y
 
   # Create the agent config file
+  echo "Creating New Relic Infrastructure agent config file..."
+
   sudo cat <<EOM >> $NEW_RELIC_INFRA_CONFIG_FILE
 license_key: $NEW_RELIC_LICENSE_KEY
 log:
@@ -37,6 +41,8 @@ custom_attributes:
 EOM
 
   if [ "$NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED" = "true" ]; then
+    echo "Enabling New Relic Infrastructure logs..."
+
     DRIVER_INIT_SCRIPT_LOGS_PATH="/databricks/init_scripts"
     DRIVER_LOGS_PATH="/databricks/driver/logs"
     DRIVER_EVENT_LOGS_PATH="/databricks/driver/eventlogs/*"
@@ -44,6 +50,8 @@ EOM
     WORKER_INIT_SCRIPT_LOGS_PATH="/databricks/init_scripts"
 
     if [ "$DB_IS_DRIVER" = "TRUE" ]; then
+      echo "Creating driver Fluent Bit configuration files..."
+
       sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit.conf
 [INPUT]
     Name tail
@@ -186,6 +194,8 @@ EOM
     Time_Keep On
 EOM
     else
+      echo "Creating worker Fluent Bit configuration files..."
+
       sudo cat <<EOM > $NEW_RELIC_INFRA_DATABRICKS_DIR/fluentbit.conf
 [INPUT]
     Name tail
@@ -301,13 +311,20 @@ EOM
   fi
 
   # Start the agent
+  echo "Starting New Relic Infrastructure agent..."
+
   sudo systemctl start newrelic-infra
+
+  echo "New Relic Infrastructure agent installation complete."
 fi
 
 # Don't install the integration on executors
 if [ "$DB_IS_DRIVER" != "TRUE" ]; then
+  echo "Not installing the Databricks Integration on worker nodes"
   exit
 fi
+
+echo "Installing the Databricks Integration..."
 
 # Set environment variables with defaults
 NEW_RELIC_DATABRICKS_LOG_LEVEL=${NEW_RELIC_DATABRICKS_LOG_LEVEL:-"warn"}
@@ -332,6 +349,8 @@ cp $NEW_RELIC_DATABRICKS_TMP_DIR/newrelic-databricks-integration $NEW_RELIC_DATA
 cd $NEW_RELIC_DATABRICKS_TARGET_DIR && mkdir -p configs
 
 # Create the integration configuration file
+echo "Creating the Databricks Integration config file..."
+
 sudo cat <<EOF > $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
 apiKey: $NEW_RELIC_API_KEY
 licenseKey: $NEW_RELIC_LICENSE_KEY
@@ -384,7 +403,9 @@ EOF
 
 chmod 600 $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
 
-# Create integration startup file
+# Create the integration startup file
+echo "Creating the Databricks Integration startup file..."
+
 sudo cat <<EOM > $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 #!/bin/bash
 
@@ -414,6 +435,8 @@ EOM
 chmod 500 $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 
 # Create systemd service file
+echo "Creating the Databricks Integration systemd service file..."
+
 sudo cat <<EOM > /etc/systemd/system/newrelic-databricks-integration.service
 [Unit]
 Description=New Relic Databricks Integration
@@ -438,6 +461,10 @@ WantedBy=multi-user.target
 EOM
 
 # Enable and run the service
+echo "Enabling and starting the Databricks Integration service..."
+
 sudo systemctl daemon-reload
 sudo systemctl enable newrelic-databricks-integration.service
 sudo systemctl start newrelic-databricks-integration
+
+echo "Databricks Integration installation complete."
