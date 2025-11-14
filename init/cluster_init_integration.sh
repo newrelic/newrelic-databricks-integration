@@ -6,6 +6,7 @@ NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED=${NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED:-"
 if [ "$NEW_RELIC_INFRASTRUCTURE_ENABLED" = "true" ]; then
   NEW_RELIC_INFRA_CONFIG_FILE="/etc/newrelic-infra.yml"
   NEW_RELIC_INFRA_DATABRICKS_DIR="/databricks/driver/newrelic-infra"
+  NEW_RELIC_INFRASTRUCTURE_LOG_LEVEL=${NEW_RELIC_INFRASTRUCTURE_LOG_LEVEL:-"info"}
 
   echo "Installing New Relic Infrastructure..."
 
@@ -29,7 +30,7 @@ if [ "$NEW_RELIC_INFRASTRUCTURE_ENABLED" = "true" ]; then
   sudo cat <<EOM >> $NEW_RELIC_INFRA_CONFIG_FILE
 license_key: $NEW_RELIC_LICENSE_KEY
 log:
-  level: info
+  level: $NEW_RELIC_INFRASTRUCTURE_LOG_LEVEL
   forward: true
   format: json
 custom_attributes:
@@ -327,12 +328,21 @@ fi
 echo "Installing the Databricks Integration..."
 
 # Set environment variables with defaults
+NEW_RELIC_DATABRICKS_INTERVAL=${NEW_RELIC_DATABRICKS_INTERVAL:-30}
 NEW_RELIC_DATABRICKS_LOG_LEVEL=${NEW_RELIC_DATABRICKS_LOG_LEVEL:-"warn"}
 NEW_RELIC_DATABRICKS_USAGE_ENABLED=${NEW_RELIC_DATABRICKS_USAGE_ENABLED:-"false"}
+NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA=${NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA:-"false"}
+NEW_RELIC_DATABRICKS_USAGE_RUN_TIME=${NEW_RELIC_DATABRICKS_USAGE_RUN_TIME:-"02:00:00"}
 NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED=${NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_JOB_RUNS_START_OFFSET=${NEW_RELIC_DATABRICKS_JOB_RUNS_START_OFFSET:-86400}
 NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_PIPELINE_METRICS_START_OFFSET=${NEW_RELIC_DATABRICKS_PIPELINE_METRICS_START_OFFSET:-86400}
 NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED=${NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED:-"true"}
 NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED:-"true"}
+NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA=${NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA:-"false"}
+NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET=${NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET:-600}
+NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS=${NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS:-100}
+NEW_RELIC_DATABRICKS_STARTUP_RETRIES=${NEW_RELIC_DATABRICKS_STARTUP_RETRIES:-5}
 
 # Define the version, download dir and target dir
 NEW_RELIC_DATABRICKS_TMP_DIR="/tmp/newrelic-databricks-integration"
@@ -356,7 +366,7 @@ apiKey: $NEW_RELIC_API_KEY
 licenseKey: $NEW_RELIC_LICENSE_KEY
 accountId: $NEW_RELIC_ACCOUNT_ID
 region: $NEW_RELIC_REGION
-interval: 30
+interval: $NEW_RELIC_DATABRICKS_INTERVAL
 runAsService: true
 log:
   level: $NEW_RELIC_DATABRICKS_LOG_LEVEL
@@ -368,28 +378,26 @@ databricks:
   usage:
     enabled: $NEW_RELIC_DATABRICKS_USAGE_ENABLED
     warehouseId: "$NEW_RELIC_DATABRICKS_SQL_WAREHOUSE"
-    includeIdentityMetadata: false
-    runTime: 02:00:00
+    includeIdentityMetadata: $NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA
+    runTime: $NEW_RELIC_DATABRICKS_USAGE_RUN_TIME
   jobs:
     runs:
       enabled: $NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED
-      startOffset: 86400
+      startOffset: $NEW_RELIC_DATABRICKS_JOB_RUNS_START_OFFSET
   pipelines:
     metrics:
       enabled: $NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED
-      metricPrefix: databricks.
-      includeUpdateId: false
-      startOffset: 86400
+      startOffset: $NEW_RELIC_DATABRICKS_PIPELINE_METRICS_START_OFFSET
       intervalOffset: 5
     logs:
       enabled: $NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED
   queries:
     metrics:
       enabled: $NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED
-      includeIdentityMetadata: false
-      startOffset: 600
+      includeIdentityMetadata: $NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA
+      startOffset: $NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET
       intervalOffset: 5
-      maxResults: 100
+      maxResults: $NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS
 spark:
   webUiUrl: http://{UI_HOST}:{UI_PORT}
   clusterManager: databricks
@@ -397,8 +405,8 @@ tags:
   databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   databricksClusterId: $DB_CLUSTER_ID
   databricksClusterName: $DB_CLUSTER_NAME
-  databricksIsDriverNode: $DB_IS_DRIVER
-  databricksIsJobCluster: $DB_IS_JOB_CLUSTER
+  databricksIsDriverNode: ${DB_IS_DRIVER,,}
+  databricksIsJobCluster: ${DB_IS_JOB_CLUSTER,,}
 EOF
 
 chmod 600 $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
@@ -411,7 +419,7 @@ sudo cat <<EOM > $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 
 TRIES=0
 
-while [ \$TRIES -lt 5 ]; do
+while [ \$TRIES -lt $NEW_RELIC_DATABRICKS_STARTUP_RETRIES ]; do
   if [ ! -e /tmp/driver-env.sh ]; then
     sleep 5
   fi
@@ -434,7 +442,7 @@ EOM
 
 chmod 500 $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 
-# Create systemd service file
+# Create the systemd service file
 echo "Creating the Databricks Integration systemd service file..."
 
 sudo cat <<EOM > /etc/systemd/system/newrelic-databricks-integration.service
