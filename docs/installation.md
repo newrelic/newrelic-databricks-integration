@@ -49,35 +49,53 @@ all-purpose cluster, perform the following steps.
 * `NEW_RELIC_LICENSE_KEY` - Your [New Relic License Key](https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/#license-key)
 * `NEW_RELIC_ACCOUNT_ID` - Your [New Relic Account ID](https://docs.newrelic.com/docs/accounts/accounts-billing/account-structure/account-id/)
 * `NEW_RELIC_REGION` - The [region](https://docs.newrelic.com/docs/accounts/accounts-billing/account-setup/choose-your-data-center/#regions-availability)
-   of your New Relic account; one of `US` or `EU`
+  of your New Relic account; one of `US` or `EU`
 * `NEW_RELIC_DATABRICKS_INTERVAL` - The integration collection [interval](./configuration.md#interval),
   in seconds. Defaults to `30`.
 * `NEW_RELIC_DATABRICKS_LOG_LEVEL` - The integration [log level](./configuration.md#level).
   Defaults to `warn`.
 * `NEW_RELIC_DATABRICKS_WORKSPACE_HOST` - The [instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids)
-   of the target Databricks instance
+  of the target Databricks instance
 * `NEW_RELIC_DATABRICKS_ACCESS_TOKEN` - To [authenticate](./authentication.md) with
-   a [personal access token](https://docs.databricks.com/en/dev-tools/auth/pat.html#databricks-personal-access-tokens-for-workspace-users),
-   your personal access token
+  a [personal access token](https://docs.databricks.com/en/dev-tools/auth/pat.html#databricks-personal-access-tokens-for-workspace-users),
+  your personal access token
 * `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID` - To [use a service principal to authenticate with Databricks (OAuth M2M)](https://docs.databricks.com/en/dev-tools/auth/oauth-m2m.html),
-   the OAuth client ID for the service principal
+  the OAuth client ID for the service principal
 * `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET` - To [use a service principal to authenticate with Databricks (OAuth M2M)](https://docs.databricks.com/en/dev-tools/auth/oauth-m2m.html),
-   an OAuth client secret associated with the service principal
+  an OAuth client secret associated with the service principal
 * `NEW_RELIC_DATABRICKS_JOB_RUNS_ENABLED` - Set to `true` to enable collection
-  of [job run metrics](./jobs.md) for this workspace or `false` to disable
-  collection. Defaults to `true`.
+  of [Databricks Lakeflow Job run metrics](./jobs.md) for this workspace or
+  `false` to disable collection. Defaults to `true`.
+* `NEW_RELIC_DATABRICKS_JOB_RUNS_START_OFFSET` - The [start offset](./configuration.md#jobs--runs--startoffset)
+  to use when collecting [Databricks Lakeflow Job run metrics](./jobs.md), in
+  seconds. Defaults to 86400 (1 day).
 * `NEW_RELIC_DATABRICKS_PIPELINE_METRICS_ENABLED` - Set to `true` to enable
   collection of [Databricks Lakeflow Declarative Pipeline update metrics](./pipelines.md#pipeline-update-metrics)
   for this workspace or `false` to disable collection. Defaults to `true`.
+* `NEW_RELIC_DATABRICKS_PIPELINE_METRICS_START_OFFSET` - The [start offset](./configuration.md#pipelines--metrics--startoffset)
+  to use when collecting [Databricks Lakeflow Declarative Pipeline update metrics](./pipelines.md#pipeline-update-metrics),
+  in seconds. Defaults to 86400 (1 day).
 * `NEW_RELIC_DATABRICKS_PIPELINE_EVENT_LOGS_ENABLED` - Set to `true` to enable
   collection of [Databricks Lakeflow Declarative Pipeline event logs](./pipelines.md#pipeline-event-logs)
   for this workspace or `false` to disable collection. Defaults to `true`.
 * `NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED` - Set to `true` to enable
   collection of Databricks [query metrics](./queries.md) for this workspace
   or `false` to disable collection. Defaults to `true`.
+* `NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA` - Set to `true`
+  to enable inclusion of [identity related metadata](./configuration.md#queries--metrics--includeidentitymetadata)
+  with Databricks [query metrics](./queries.md). Defaults to `false`.
+* `NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET` - The [start offset](./configuration.md#queries--metrics--startoffset)
+  to use when collecting [query metrics](./queries.md), in seconds. Defaults to
+  600 (10 minutes).
+* `NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS` - The [maximum number of results](./configuration.md#queries--metrics--maxresults)
+  to return per page on query history API calls when collecting [query metrics](./queries.md).
+  Defaults to 100.
 * `NEW_RELIC_DATABRICKS_USAGE_ENABLED` - Set to `true` to enable collection of
   [consumption and cost data](./billable-usage.md) or `false` to disable
   collection. Defaults to `false`.
+* `NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA` - Set to `true` to
+  enable inclusion of [identity related metadata](./configuration.md#usage--includeidentitymetadata)
+  with Databricks consumption and cost data. Defaults to `false`.
 * `NEW_RELIC_DATABRICKS_USAGE_RUN_TIME` - The time of day to collect
   [consumption and cost data](./billable-usage.md). See the documentation of the
   [`runTime` configuration parameter](./configuration.md#usage--runtime) for details on
@@ -88,6 +106,9 @@ all-purpose cluster, perform the following steps.
   [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
   on the driver and worker nodes of the [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster).
   Defaults to `false`.
+* `NEW_RELIC_INFRASTRUCTURE_LOG_LEVEL` - The [New Relic Infrastructure agent](https://docs.newrelic.com/docs/infrastructure/introduction-infra-monitoring/)
+  [log level](https://docs.newrelic.com/docs/infrastructure/infrastructure-agent/configuration/infrastructure-agent-configuration-settings/#level).
+  Defaults to `info`.
 * `NEW_RELIC_INFRASTRUCTURE_LOGS_ENABLED` - Set to `true` to enable collection
   of the Spark driver and executor logs, the Spark driver event log, and the
   driver and worker init script logs. Logs will be [forwarded](https://docs.newrelic.com/docs/logs/forward-logs/forward-your-logs-using-infrastructure-agent/)
@@ -113,7 +134,8 @@ all-purpose cluster, perform the following steps.
   Instead, it is recommended to create a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
   using the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html)
   and [reference the secret in the environment variable](https://docs.databricks.com/aws/en/security/secrets/secrets-spark-conf-env-var#reference-a-secret-in-an-environment-variable).
-  See the [reference](./reference.md) documentation for an [example](./reference.md#example-creating-and-using-a-secret-for-your-new-relic-license-key)
+  See the [additional information](./additional-information.md) documentation
+  for an [example](./reference.md#example-creating-and-using-a-secret-for-your-new-relic-license-key)
   of creating a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
   and referencing it in a custom [environment variable](https://docs.databricks.com/aws/en/compute/configure#environment-variables).
 * When `NEW_RELIC_DATABRICKS_USAGE_ENABLED` is set to `true`, a [SQL warehouse](https://docs.databricks.com/en/compute/sql-warehouse/index.html)

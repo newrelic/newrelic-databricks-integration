@@ -655,10 +655,10 @@ for more details.
 
 | Description | Valid Values | Required | Default |
 | --- | --- | --- | --- |
-| The maximum number of query results to return per page when listing the query history | number | N | 100 |
+| The maximum number of results to return per page on query history API calls | number | N | 100 |
 
-This parameter specifies the maximum number of query results to return per page
-when listing queries via the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list).
+This parameter specifies the maximum number of results to return per page when
+calling the [list query history API](https://docs.databricks.com/api/workspace/queryhistory/list).
 
 **NOTE:**
 For performance reasons, since the integration requests query metrics for each
