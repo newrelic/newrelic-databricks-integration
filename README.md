@@ -23,15 +23,14 @@ and optimizing Databricks workloads.
 The integration collects the following types of telemetry:
 
 -   Apache Spark application metrics, such as Spark executor memory and cpu
-    metrics, durations and I/O metrics of Spark jobs, stages, and tasks, and Spark
-    RDD memory and disk metrics
+    metrics, durations of Spark jobs, durations and I/O metrics of Spark stages
+    and tasks, and Spark RDD memory and disk metrics
 -   Databricks Lakeflow job run metrics, such as durations, start and end times,
     and termination codes and types for job and task runs.
 -   Databricks Lakeflow Declarative Pipeline update metrics, such as durations,
     start and end times, and completion status for updates and flows.
 -   Databricks Lakeflow Declarative Pipeline event logs
--   Databricks query metrics, including execution times, query statuses, and
-    query I/O metrics.
+-   Databricks query metrics, including execution times and query I/O metrics.
 -   Databricks cluster health metrics and logs, such as driver and worker memory
     and cpu metrics and driver and executor logs.
 -   Databricks consumption and cost data that can be used to show DBU consumption
@@ -71,8 +70,9 @@ Follow the steps to [deploy the integration to a Databricks cluster](./docs/inst
 
 Once the Databricks Integration has run for a few minutes, use the
 [query builder](https://one.newrelic.com/data-exploration/query-builder) in New
-Relic to run the following query (replace `[YOUR_CLUSTER_NAME]` with the _name_
-of the Databricks cluster _where the integration was installed_):
+Relic to run the following query, replacing `[YOUR_CLUSTER_NAME]` with the _name_
+of the Databricks cluster _where the integration was installed_ (note that if
+your cluster name includes a `'`, you must escape it with a `\`):
 
 `SELECT uniqueCount(executorId) AS Executors FROM SparkExecutorSample WHERE databricksclustername = '[YOUR_CLUSTER_NAME]'`
 
