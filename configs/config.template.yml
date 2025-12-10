@@ -34,8 +34,6 @@ databricks:
   pipelines:
     metrics:
       enabled: true
-      metricPrefix: databricks.
-      includeUpdateId: false
       startOffset: 86400
       intervalOffset: 5
     logs:
