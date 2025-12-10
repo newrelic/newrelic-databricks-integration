@@ -135,7 +135,7 @@ all-purpose cluster, perform the following steps.
   using the [Databricks CLI](https://docs.databricks.com/en/dev-tools/cli/index.html)
   and [reference the secret in the environment variable](https://docs.databricks.com/aws/en/security/secrets/secrets-spark-conf-env-var#reference-a-secret-in-an-environment-variable).
   See the [additional information](./additional-information.md) documentation
-  for an [example](./reference.md#example-creating-and-using-a-secret-for-your-new-relic-license-key)
+  for an [example](./additional-information.md#example-creating-and-using-a-secret-for-your-new-relic-license-key)
   of creating a [secret](https://docs.databricks.com/en/security/secrets/secrets.html)
   and referencing it in a custom [environment variable](https://docs.databricks.com/aws/en/compute/configure#environment-variables).
 * When `NEW_RELIC_DATABRICKS_USAGE_ENABLED` is set to `true`, a [SQL warehouse](https://docs.databricks.com/en/compute/sql-warehouse/index.html)
