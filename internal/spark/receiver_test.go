@@ -119,9 +119,16 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	// Set the cluster manager type to databricks
 	viper.Set("spark.clusterManager", "databricks")
 
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
+
 	// Setup up mock workspace
 	_, teardown := setupMockWorkspace()
 	defer teardown()
+
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -202,12 +209,50 @@ func TestNewSparkMetricsReceiver_ClusterManagerError(t *testing.T) {
 	assert.Equal(t, "invalid clusterManager type", err.Error())
 }
 
+func TestNewSparkMetricsReceiver_MissingDatabricksClusterIdError(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Set the cluster manager type to databricks
+	viper.Set("spark.clusterManager", "databricks")
+
+	// Do not set the databricks cluster ID to simulate missing the ID from the
+	// config
+
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
+	// Setup mock Spark API client
+	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag map
+	tags := map[string]string{"env": "test"}
+
+	// Execute the function under test
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+		mockIntegration,
+		mockClient,
+		tags,
+	)
+
+	// Verify results
+	assert.Error(t, err)
+	assert.Nil(t, receiver)
+	assert.Equal(t, "missing databricks cluster ID", err.Error())
+}
+
 func TestNewSparkMetricsReceiver_NewDatabricksWorkspaceError(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
 
 	// Set the cluster manager type to databricks
 	viper.Set("spark.clusterManager", "databricks")
+
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
 
 	// Setup expected error message
 	expectedError := "error creating Databricks workspace"
@@ -784,9 +829,16 @@ func TestPollEvents(t *testing.T) {
 	// DatabricksSparkEventDecorator
 	viper.Set("spark.clusterManager", "databricks")
 
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
+
 	// Setup up mock workspace
 	_, teardown := setupMockWorkspace()
 	defer teardown()
+
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -799,7 +851,6 @@ func TestPollEvents(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -1014,8 +1065,6 @@ func TestPollEvents(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1031,6 +1080,38 @@ func TestPollEvents(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify timestamp
@@ -1236,7 +1317,6 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -1330,8 +1410,6 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1347,6 +1425,38 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify a few executor attributes to ensure values are correctly
@@ -1483,7 +1593,6 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -1732,8 +1841,6 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1749,6 +1856,38 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify event
@@ -1945,7 +2084,6 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -2762,8 +2900,6 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -2779,6 +2915,38 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify event
@@ -3252,7 +3420,6 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -3501,8 +3668,6 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -3518,6 +3683,38 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify RDD attributes (on all 3 RDD event typoes)

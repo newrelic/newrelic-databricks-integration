@@ -293,7 +293,10 @@ type SparkRDD struct {
 // @TODO: this function isn't unit testable because LabsIntegration is not an
 // interface and cannot be mocked and the struct has unexported fields that
 // cannot be initialized properly (for example we can't set the components
-// array to an empty array and having it be nil will cause a panic).
+// array to an empty array and having it be nil will cause a panic). For now,
+// this file is ignored in the test coverage report, but in the future we should
+// refactor LabsIntegration to be an interface so we can properly mock it in
+// unit tests.
 func InitPipelines(
 	ctx context.Context,
 	i *integration.LabsIntegration,

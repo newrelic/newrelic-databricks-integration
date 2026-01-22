@@ -49,6 +49,8 @@ databricks:
 spark:
   webUiUrl: http://localhost:4040
   clusterManager: databricks
+  databricks:
+    clusterId: [YOUR_DATABRICKS_CLUSTER_ID]
 tags:
   key1: value
   key2: value

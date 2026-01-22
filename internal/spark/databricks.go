@@ -92,6 +92,8 @@ func parseDatabricksSparkJobGroup(
 		// The job run case, "11111_22222_job-12345-run-56789-action-5432".
 		jobId, err := strconv.ParseInt(matches[2], 10, 64)
 		if err != nil {
+			// This should never happen because the regex only matches digits
+			// for the jobId but log it just in case.
 			log.Debugf(
 				"invalid jobId in job group name: %s",
 				matches[2],
@@ -101,6 +103,8 @@ func parseDatabricksSparkJobGroup(
 
 		taskRunId, err := strconv.ParseInt(matches[3], 10, 64)
 		if err != nil {
+			// This should never happen because the regex only matches digits
+			// for the taskRunId but log it just in case.
 			log.Debugf(
 				"invalid taskRunId in job group name: %s",
 				matches[3],
@@ -141,6 +145,8 @@ func parseDatabricksSparkJobGroup(
 type DatabricksSparkEventDecorator struct {
 	w                       databricks.DatabricksWorkspace
 	workspaceInfo           *databricks.WorkspaceInfo
+	clusterInfo             *databricks.ClusterInfo
+	clusterId               string
 	// stageIdsToJobs keeps track of the job group info for each stage's
 	// "parent" job so that stages and tasks can be decorated with the same
 	// job group info as the "parent" job.
@@ -149,6 +155,7 @@ type DatabricksSparkEventDecorator struct {
 
 func NewDatabricksSparkEventDecorator(
 	ctx context.Context,
+	clusterId string,
 ) (*DatabricksSparkEventDecorator, error) {
 	w, err := databricks.NewDatabricksWorkspace()
 	if err != nil {
@@ -162,9 +169,16 @@ func NewDatabricksSparkEventDecorator(
 		return nil, err
 	}
 
+	clusterInfo, err := databricks.GetClusterInfoById(ctx, w, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
 	return &DatabricksSparkEventDecorator{
 		w:                       w,
 		workspaceInfo:           workspaceInfo,
+		clusterInfo:             clusterInfo,
+		clusterId:               clusterId,
 		stageIdsToJobs:          make(map[int]*databricksSparkJobGroupInfo),
 	}, nil
 }
@@ -270,6 +284,17 @@ func (d *DatabricksSparkEventDecorator) decorate(
 	attrs["databricksWorkspaceId"] = d.workspaceInfo.Id
 	attrs["databricksWorkspaceName"] = d.workspaceInfo.InstanceName
 	attrs["databricksWorkspaceUrl"] = d.workspaceInfo.Url
+
+	// Always add the cluster info to the attributes
+	attrs["databricksClusterId"] = d.clusterId
+	attrs["databricksClusterName"] = d.clusterInfo.Name
+	attrs["databricksClusterSource"] = d.clusterInfo.Source
+	attrs["databricksClusterInstancePoolId"] = d.clusterInfo.InstancePoolId
+	// NOTE: Adding a lowercase version of databricksClusterName for backwards
+	// compatibility with our older dashboards definitions. The dashboard
+	// definitions have been updated but this ensures that existing users that
+	// have not updated their dashboards will still see the cluster name.
+	attrs["databricksclustername"] = d.clusterInfo.Name
 
 	// If no job group info is provided, skip adding additional attributes.
 	if sparkJobGroupInfo == nil {

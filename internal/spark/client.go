@@ -3,6 +3,7 @@ package spark
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/connectors"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
@@ -13,8 +14,14 @@ var (
 	// to enable mocking of the Spark API client and the function for making
 	// HTTP requests.
 	NewSparkApiClient = newSparkApiClient
-	makeRequest       = makeRequestImpl
+	newHttpGetConnector = newHttpGetConnectorImpl
 )
+
+type httpGetConnector interface {
+	SetAuthenticator(authenticator connectors.HttpAuthenticator)
+	SetHeaders(headers map[string]string)
+	Request() (io.ReadCloser, error)
+}
 
 type SparkApiClient interface {
 	GetApplications(ctx context.Context) ([]SparkApplication, error)
@@ -140,12 +147,12 @@ func (s *sparkApiClientImpl) GetApplicationRDDs(
 	return rdds, nil
 }
 
-func makeRequestImpl(
+func makeRequest(
 	url string,
 	authenticator connectors.HttpAuthenticator,
 	response interface{},
 ) error {
-	connector := connectors.NewHttpGetConnector(url)
+	connector := newHttpGetConnector(url)
 
 	if authenticator != nil {
 		connector.SetAuthenticator(authenticator)

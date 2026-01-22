@@ -89,7 +89,14 @@ func newSparkMetricsReceiver(
 	case ClusterManagerTypeDatabricks:
 		log.Debugf("using Databricks metric decorator")
 
-		eventDecorator, err = NewDatabricksSparkEventDecorator(ctx)
+		clusterId := viper.GetString("spark.databricks.clusterId")
+		if clusterId == "" {
+			return nil, errors.New(
+				"missing databricks cluster ID",
+			)
+		}
+
+		eventDecorator, err = NewDatabricksSparkEventDecorator(ctx, clusterId)
 		if err != nil {
 			return nil, err
 		}

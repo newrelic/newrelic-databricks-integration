@@ -74,7 +74,7 @@ Relic to run the following query, replacing `[YOUR_CLUSTER_NAME]` with the _name
 of the Databricks cluster _where the integration was installed_ (note that if
 your cluster name includes a `'`, you must escape it with a `\`):
 
-`SELECT uniqueCount(executorId) AS Executors FROM SparkExecutorSample WHERE databricksclustername = '[YOUR_CLUSTER_NAME]'`
+`SELECT uniqueCount(executorId) AS Executors FROM SparkExecutorSample WHERE databricksClusterName = '[YOUR_CLUSTER_NAME]'`
 
 The result of the query should be **a number greater than zero**.
 

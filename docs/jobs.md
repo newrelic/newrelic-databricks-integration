@@ -413,7 +413,7 @@ WITH
 FROM SparkJob
 SELECT
  substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,
- databricksclustername AS Cluster,
+ databricksClusterName AS Cluster,
  sparkAppName AS 'Spark App Name',
  description AS 'Job Description',
  jobId AS 'Spark Job ID',

@@ -116,4 +116,13 @@ func (m *MockSparkEventDecorator) decorate(attrs map[string]interface{}) {
 	attrs["databricksWorkspaceId"] = int64(12345)
 	attrs["databricksWorkspaceName"] = "foo.fakedomain.local"
 	attrs["databricksWorkspaceUrl"] = "https://foo.fakedomain.local"
+
+	// Add Databricks cluster attributes
+	attrs["databricksClusterId"] = "fake-cluster-id"
+	attrs["databricksClusterName"] = "fake-cluster-name"
+	attrs["databricksClusterSource"] = "fake-cluster-source"
+	attrs["databricksClusterInstancePoolId"] = "fake-cluster-instance-pool-id"
+	// Add a lower case version of databricksClusterName for backwards
+	// compatibility testing
+	attrs["databricksclustername"] = "fake-cluster-name"
 }

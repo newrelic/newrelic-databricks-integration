@@ -1,0 +1,6 @@
+module: "github.com/newrelic/newrelic-databricks-integration"
+ignore_rules:
+  - mock_.*
+  - .*\.local\..*
+  - .*impl\.go
+  - internal/spark/spark.go
