@@ -76,6 +76,7 @@ func newSparkMetricsReceiver(
 	ctx context.Context,
 	i *integration.LabsIntegration,
 	client SparkApiClient,
+	originalTags map[string]string,
 	tags map[string]string,
 ) (pipeline.EventsReceiver, error) {
 	clusterManager, err := getClusterManager()
@@ -89,14 +90,17 @@ func newSparkMetricsReceiver(
 	case ClusterManagerTypeDatabricks:
 		log.Debugf("using Databricks metric decorator")
 
-		clusterId := viper.GetString("spark.databricks.clusterId")
-		if clusterId == "" {
-			return nil, errors.New(
-				"missing databricks cluster ID",
-			)
-		}
-
-		eventDecorator, err = NewDatabricksSparkEventDecorator(ctx, clusterId)
+		// We pass the originalTags to support the case where the customer is
+		// using an older version of the init script that doesn't have the
+		// databricks.clusterId set but does have the legacy databricks* tags
+		// set. This allows use to provide dynamic cluster attributes even if an
+		// older init script is in use and still allow the legacy tags to be
+		// removed from the actual tags added to all events emitted by the
+		// receiver.
+		eventDecorator, err = NewDatabricksSparkEventDecorator(
+			ctx,
+			getClusterId(originalTags),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -1235,4 +1239,26 @@ func makeAppAttributesMap(
 	attrs["sparkAppName"] = sparkApp.Name
 
 	return attrs
+}
+
+// Get the Databricks cluster ID either from the configuration parameter
+// spark.databricks.clusterId or from the tags map under the key
+// databricksclusterid. The latter check allows us to support the case where the
+// customer is using an older version of the init script that doesn't have the
+// databricks.clusterId configuration parameter set but does have the legacy
+// databricks* tags set. This allows use to provide dynamic cluster attributes
+// even if an older init script is in use.
+func getClusterId(originalTags map[string]string) string {
+	clusterId := viper.GetString("spark.databricks.clusterId")
+
+	if clusterId == "" {
+		var ok bool
+
+		clusterId, ok = originalTags["databricksclusterid"]
+		if ok {
+			log.Debugf("got Databricks cluster ID from tags")
+		}
+	}
+
+	return clusterId
 }

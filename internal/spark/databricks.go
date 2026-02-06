@@ -169,9 +169,15 @@ func NewDatabricksSparkEventDecorator(
 		return nil, err
 	}
 
-	clusterInfo, err := databricks.GetClusterInfoById(ctx, w, clusterId)
-	if err != nil {
-		return nil, err
+	var clusterInfo *databricks.ClusterInfo
+
+	if clusterId != "" {
+		log.Debugf("using provided cluster ID: %s", clusterId)
+
+		clusterInfo, err = databricks.GetClusterInfoById(ctx, w, clusterId)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &DatabricksSparkEventDecorator{
@@ -285,16 +291,18 @@ func (d *DatabricksSparkEventDecorator) decorate(
 	attrs["databricksWorkspaceName"] = d.workspaceInfo.InstanceName
 	attrs["databricksWorkspaceUrl"] = d.workspaceInfo.Url
 
-	// Always add the cluster info to the attributes
-	attrs["databricksClusterId"] = d.clusterId
-	attrs["databricksClusterName"] = d.clusterInfo.Name
-	attrs["databricksClusterSource"] = d.clusterInfo.Source
-	attrs["databricksClusterInstancePoolId"] = d.clusterInfo.InstancePoolId
-	// NOTE: Adding a lowercase version of databricksClusterName for backwards
-	// compatibility with our older dashboards definitions. The dashboard
-	// definitions have been updated but this ensures that existing users that
-	// have not updated their dashboards will still see the cluster name.
-	attrs["databricksclustername"] = d.clusterInfo.Name
+	// Add the cluster info to the attributes if available
+	if d.clusterInfo != nil {
+		attrs["databricksClusterId"] = d.clusterId
+		attrs["databricksClusterName"] = d.clusterInfo.Name
+		attrs["databricksClusterSource"] = d.clusterInfo.Source
+		attrs["databricksClusterInstancePoolId"] = d.clusterInfo.InstancePoolId
+		// NOTE: Adding a lowercase version of databricksClusterName for backwards
+		// compatibility with our older dashboards definitions. The dashboard
+		// definitions have been updated but this ensures that existing users that
+		// have not updated their dashboards will still see the cluster name.
+		attrs["databricksclustername"] = d.clusterInfo.Name
+	}
 
 	// If no job group info is provided, skip adding additional attributes.
 	if sparkJobGroupInfo == nil {

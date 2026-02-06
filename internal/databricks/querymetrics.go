@@ -281,8 +281,11 @@ func makeQueryEventAttrs(
 		// directly with an early return if err != nil. Maybe in cache.go after
 		// it is refactored?
 		attrs["workspaceId"] = workspaceInfo.Id
+		attrs["databricksWorkspaceId"] = workspaceInfo.Id
 		attrs["workspaceName"] = workspaceInfo.InstanceName
+		attrs["databricksWorkspaceName"] = workspaceInfo.InstanceName
 		attrs["workspaceUrl"] = workspaceInfo.Url
+		attrs["databricksWorkspaceUrl"] = workspaceInfo.Url
 	}
 
 	attrs["duration"] = query.Duration

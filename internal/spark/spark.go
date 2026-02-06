@@ -2,6 +2,7 @@ package spark
 
 import (
 	"context"
+	"maps"
 
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/exporters"
@@ -302,6 +303,15 @@ func InitPipelines(
 	i *integration.LabsIntegration,
 	tags map[string]string,
 ) error {
+	// Remove legacy tags
+	prunedTags := maps.Clone(tags)
+
+	delete(prunedTags, "databricksworkspacehost")
+	delete(prunedTags, "databricksclusterid")
+	delete(prunedTags, "databricksclustername")
+	delete(prunedTags, "databricksisdrivernode")
+	delete(prunedTags, "databricksisjobcluster")
+
 	// Get the web UI URL
 	webUiUrl := viper.GetString("spark.webUiUrl")
 	if webUiUrl == "" {
@@ -334,12 +344,22 @@ func InitPipelines(
 	mp := pipeline.NewEventsPipeline("spark-metrics-pipeline")
 	mp.AddExporter(newRelicExporter)
 
-	// Create the Spark receiver
+	// Create the Spark receiver. We need to pass the original tags here so that
+	// the DatabricksSparkEventDecorator can get the cluster ID from the legacy
+	// databricksclusterid tag if spark.databricks.clusterId is not set. This
+	// supports the case where the customer is using an older version of the
+	// init script that still has the legacy databricks* tags. This does expose
+	// implementation details of the receiver to this function and passing the
+	// original tags is unneccessary in other cases, but this is the simplest
+	// way to be able to provide dynamic cluster attributes even if an older
+	// init script is in use and still remove the legacy tags from the actual
+	// tags added to all events emitted by the receiver.
 	sparkReceiver, err := NewSparkMetricsReceiver(
 		ctx,
 		i,
 		sparkApiClient,
 		tags,
+		prunedTags,
 	)
 	if err != nil {
 		return err

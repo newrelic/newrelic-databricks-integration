@@ -3,6 +3,7 @@ package databricks
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration"
@@ -17,6 +18,15 @@ func InitPipelines(
 	i *integration.LabsIntegration,
 	tags map[string]string,
 ) error {
+	// Remove legacy tags
+	prunedTags := maps.Clone(tags)
+
+	delete(prunedTags, "databricksworkspacehost")
+	delete(prunedTags, "databricksclusterid")
+	delete(prunedTags, "databricksclustername")
+	delete(prunedTags, "databricksisdrivernode")
+	delete(prunedTags, "databricksisjobcluster")
+
 	// Initialize caches
 	InitCaches()
 
@@ -139,7 +149,7 @@ func InitPipelines(
 			i,
 			w,
 			time.Duration(startOffset) * time.Second,
-			tags,
+			prunedTags,
 		)
 		mp.AddReceiver(databricksJobsReceiver)
 
@@ -157,7 +167,7 @@ func InitPipelines(
 
 	if collectPipelineEventLogs {
 		databricksPipelineEventsReceiver :=
-			NewDatabricksPipelineEventsReceiver(i, w, tags)
+			NewDatabricksPipelineEventsReceiver(i, w, prunedTags)
 
 		// Create a logs pipeline for the event logs
 		lp := pipeline.NewLogsPipeline(
@@ -199,7 +209,7 @@ func InitPipelines(
 				w,
 				time.Duration(startOffset) * time.Second,
 				time.Duration(intervalOffset) * time.Second,
-				tags,
+				prunedTags,
 			)
 
 		// Create an events pipeline for the pipeline metrics
@@ -258,7 +268,7 @@ func InitPipelines(
 				viper.GetBool(
 					"databricks.queries.metrics.includeIdentityMetadata",
 				),
-				tags,
+				prunedTags,
 			)
 		if err != nil {
 			return err
