@@ -52,6 +52,7 @@ for all nodes in the [cluster](https://docs.databricks.com/en/getting-started/co
 | Attribute Name | Data Type | Description |
 | --- | --- | --- |
 | `databricksWorkspaceHost` | string | The [instance name](https://docs.databricks.com/en/workspace/workspace-details.html#workspace-instance-names-urls-and-ids) of the target Databricks instance as specified in the `NEW_RELIC_DATABRICKS_WORKSPACE_HOST` [environment variable](./installation.md#supported-init-script-environment-variables) |
+| `databricksWorkspaceName` | string | Alias of `databricksWorkspaceHost` included for consistency with the workspace name attributes on other events |
 | `databricksClusterId` | string | ID of the Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster) where the metric, event, or `Log` originated from. On a host entity, the ID of the [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster) the host is a part of. |
 | `databricksClusterName` | string | Name of the Databricks [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster) where the metric, event, or `Log` originated from. On a host entity, the name of the [cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster) the host is a part of. |
 | `databricksIsDriverNode` | string | `true` if the metric, event, or `Log` originated from the driver node. `false` if the metric, event, or `Log` originated from a worker node. On a host entity, `true` if the host is the driver node or `false` if it is a worker node. |
