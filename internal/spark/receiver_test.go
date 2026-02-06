@@ -3,6 +3,7 @@ package spark
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -119,9 +120,39 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	// Set the cluster manager type to databricks
 	viper.Set("spark.clusterManager", "databricks")
 
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
+
 	// Setup up mock workspace
 	_, teardown := setupMockWorkspace()
 	defer teardown()
+
+	// Setup a tracker for GetClusterInfoById calls
+	getClusterInfoByIdCalled := false
+
+	// Mock the GetClusterInfoById to track calls
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	defer func() {
+		databricks.GetClusterInfoById = originalGetClusterInfoById
+	}()
+
+	databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+		*databricks.ClusterInfo,
+		error,
+	) {
+		getClusterInfoByIdCalled = true
+		return &databricks.ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			Creator:        "fake-cluster-creator",
+			InstancePoolId: "fake-cluster-instance-pool-id",
+			SingleUserName: "fake-cluster-single-user-name",
+		}, nil
+	}
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -131,8 +162,9 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Mock Now
 	now := time.Now()
@@ -143,6 +175,7 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -155,6 +188,13 @@ func TestNewSparkMetricsReceiver_ValidParams(t *testing.T) {
 	assert.Equal(t, mockIntegration, sparkReceiver.i)
 	assert.Equal(t, mockClient, sparkReceiver.client)
 	assert.Equal(t, ClusterManagerTypeDatabricks, sparkReceiver.clusterManager)
+	// GetClusterInfoById should be called since we provided a
+	// spark.databricks.clusterId configuration parameter.
+	assert.True(
+		t,
+		getClusterInfoByIdCalled,
+		"GetClusterInfoById should be called",
+	)
 	assert.NotNil(t, sparkReceiver.eventDecorator)
 	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
 	assert.IsType(
@@ -185,14 +225,16 @@ func TestNewSparkMetricsReceiver_ClusterManagerError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -208,6 +250,9 @@ func TestNewSparkMetricsReceiver_NewDatabricksWorkspaceError(t *testing.T) {
 
 	// Set the cluster manager type to databricks
 	viper.Set("spark.clusterManager", "databricks")
+
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
 
 	// Setup expected error message
 	expectedError := "error creating Databricks workspace"
@@ -236,13 +281,15 @@ func TestNewSparkMetricsReceiver_NewDatabricksWorkspaceError(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Execute the function under test
 	receiver, err := newSparkMetricsReceiver(
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -271,8 +318,9 @@ func TestNewSparkMetricsReceiver_StandaloneClusterManager(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Mock Now
 	now := time.Now()
@@ -283,6 +331,7 @@ func TestNewSparkMetricsReceiver_StandaloneClusterManager(t *testing.T) {
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -320,12 +369,13 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 	mockClient := &MockSparkApiClient{}
 
 	// Setup mock tag map
-	tags := map[string]string{
+	originalTags := map[string]string{
 		"environment": "production",
 		"region":      "us-west",
 		"datacenter":  "dc1",
 		"team":        "platform",
 	}
+	tags := maps.Clone(originalTags)
 
 	// Mock Now
 	now := time.Now()
@@ -336,6 +386,7 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -358,6 +409,201 @@ func TestNewSparkMetricsReceiver_CustomTags(t *testing.T) {
 	assert.Equal(t, "platform", sparkReceiver.tags["team"])
 }
 
+func TestNewSparkMetricsReceiver_NoDatabricksClusterId(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Set the cluster manager type to databricks
+	viper.Set("spark.clusterManager", "databricks")
+
+	// Setup up mock workspace
+	_, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Setup a tracker for GetClusterInfoById calls
+	getClusterInfoByIdCalled := false
+
+	// Mock the GetClusterInfoById to track calls
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	defer func() {
+		databricks.GetClusterInfoById = originalGetClusterInfoById
+	}()
+
+	databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+		*databricks.ClusterInfo,
+		error,
+	) {
+		getClusterInfoByIdCalled = true
+		return &databricks.ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			Creator:        "fake-cluster-creator",
+			InstancePoolId: "fake-cluster-instance-pool-id",
+			SingleUserName: "fake-cluster-single-user-name",
+		}, nil
+	}
+
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
+	// Setup mock Spark API client
+	mockClient := &MockSparkApiClient{}
+
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
+
+	// Execute the function under test
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+		mockIntegration,
+		mockClient,
+		originalTags,
+		tags,
+	)
+
+	// Verify results
+	assert.NoError(t, err)
+	assert.NotNil(t, receiver)
+
+	sparkReceiver, ok := receiver.(*SparkMetricsReceiver)
+	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
+	assert.Equal(t, mockIntegration, sparkReceiver.i)
+	assert.Equal(t, mockClient, sparkReceiver.client)
+	assert.Equal(t, ClusterManagerTypeDatabricks, sparkReceiver.clusterManager)
+	// GetClusterInfoById should not be called since no
+	// spark.databricks.clusterId configuration parameter was provided and no
+	// databricksclusterid tag was provided in the original tags.
+	assert.False(
+		t,
+		getClusterInfoByIdCalled,
+		"GetClusterInfoById should not be called",
+	)
+	assert.NotNil(t, sparkReceiver.eventDecorator)
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
+	assert.IsType(
+		t,
+		&DatabricksSparkEventDecorator{},
+		sparkReceiver.eventDecorator,
+		"Should return a DatabricksSparkEventDecorator",
+	)
+	assert.Equal(t, tags, sparkReceiver.tags)
+}
+
+func TestNewSparkMetricsReceiver_DatabricksClusterIdFromTag(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Set the cluster manager type to databricks
+	viper.Set("spark.clusterManager", "databricks")
+
+	// Do not set the databricks cluster ID in the config to simulate it being
+	// missing and force the receiver to look for it in the original tags.
+
+	// Setup up mock workspace
+	_, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Setup a tracker for GetClusterInfoById calls
+	getClusterInfoByIdCalled := false
+
+	// Mock the GetClusterInfoById to track calls
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	defer func() {
+		databricks.GetClusterInfoById = originalGetClusterInfoById
+	}()
+
+	databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+		*databricks.ClusterInfo,
+		error,
+	) {
+		getClusterInfoByIdCalled = true
+		return &databricks.ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			Creator:        "fake-cluster-creator",
+			InstancePoolId: "fake-cluster-instance-pool-id",
+			SingleUserName: "fake-cluster-single-user-name",
+		}, nil
+	}
+
+	// Setup mock integration
+	mockIntegration := &integration.LabsIntegration{
+		Interval: 60,
+	}
+
+	// Setup mock Spark API client
+	mockClient := &MockSparkApiClient{}
+
+	// Setup original tag map to ensure the cluster ID is taken from the
+	// databricksclusterid tag in the original tags since it's not set in the
+	// config.
+	originalTags := map[string]string{
+		"env": "test",
+		"databricksclusterid": "fake-cluster-id",
+	}
+	tags := maps.Clone(originalTags)
+
+	// Remove the databricksclusterid from the tags to simulate what would be
+	// passed to the receiver and ensure the test could only get the cluster ID
+	// from the original tags. This also allow us to verify that the receiver
+	// does not save the original tags.
+	delete(tags, "databricksclusterid")
+
+	// Mock Now
+	now := time.Now()
+	Now = func () time.Time { return now }
+
+	// Execute the function under test
+	receiver, err := newSparkMetricsReceiver(
+		context.Background(),
+		mockIntegration,
+		mockClient,
+		originalTags,
+		tags,
+	)
+
+	// Verify results
+	assert.NoError(t, err)
+	assert.NotNil(t, receiver)
+
+	sparkReceiver, ok := receiver.(*SparkMetricsReceiver)
+	assert.True(t, ok, "Should return a *SparkMetricsReceiver")
+	assert.Equal(t, mockIntegration, sparkReceiver.i)
+	assert.Equal(t, mockClient, sparkReceiver.client)
+	assert.Equal(t, ClusterManagerTypeDatabricks, sparkReceiver.clusterManager)
+	// GetClusterInfoById should be called since we provided the
+	// databricksclusterid tag in the original tags.
+	assert.True(
+		t,
+		getClusterInfoByIdCalled,
+		"GetClusterInfoById should be called",
+	)
+	assert.NotNil(t, sparkReceiver.eventDecorator)
+	assert.Equal(t, now.UTC(), sparkReceiver.lastRun)
+	assert.IsType(
+		t,
+		&DatabricksSparkEventDecorator{},
+		sparkReceiver.eventDecorator,
+		"Should return a DatabricksSparkEventDecorator",
+	)
+	assert.Equal(t, tags, sparkReceiver.tags)
+}
+
 func TestSparkMetricsReceiver_GetId(t *testing.T) {
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -367,8 +613,9 @@ func TestSparkMetricsReceiver_GetId(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Create metrics receiver instance using the mock integration, client, and
 	// tags
@@ -376,6 +623,7 @@ func TestSparkMetricsReceiver_GetId(t *testing.T) {
 		context.Background(),
 		mockIntegration,
 		mockClient,
+		originalTags,
 		tags,
 	)
 
@@ -399,8 +647,9 @@ func TestPollEvents_GetApplicationsError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Track if GetApplications was called
 	getApplicationsCalled := false
@@ -426,6 +675,7 @@ func TestPollEvents_GetApplicationsError(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+		originalTags,
         tags,
 	)
 
@@ -461,8 +711,9 @@ func TestPollEvents_CollectExecutorMetricsError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -513,6 +764,7 @@ func TestPollEvents_CollectExecutorMetricsError(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+        originalTags,
         tags,
 	)
 
@@ -542,8 +794,9 @@ func TestPollEvents_CollectJobMetricsError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -594,6 +847,7 @@ func TestPollEvents_CollectJobMetricsError(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+        originalTags,
         tags,
 	)
 
@@ -623,8 +877,9 @@ func TestPollEvents_CollectStageMetricsError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -675,6 +930,7 @@ func TestPollEvents_CollectStageMetricsError(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+		originalTags,
         tags,
 	)
 
@@ -704,8 +960,9 @@ func TestPollEvents_CollectRDDMetricsError(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{"env": "test"}
+	// Setup mock tag maps
+	originalTags := map[string]string{"env": "test"}
+	tags := maps.Clone(originalTags)
 
 	// Setup mock SparkApplications
 	sparkApps := []SparkApplication{
@@ -756,6 +1013,7 @@ func TestPollEvents_CollectRDDMetricsError(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+        originalTags,
         tags,
 	)
 
@@ -784,9 +1042,16 @@ func TestPollEvents(t *testing.T) {
 	// DatabricksSparkEventDecorator
 	viper.Set("spark.clusterManager", "databricks")
 
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
+
 	// Setup up mock workspace
 	_, teardown := setupMockWorkspace()
 	defer teardown()
+
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
 
 	// Setup mock integration
 	mockIntegration := &integration.LabsIntegration{
@@ -796,11 +1061,11 @@ func TestPollEvents(t *testing.T) {
 	// Setup mock Spark API client
 	mockClient := &MockSparkApiClient{}
 
-	// Setup mock tag map
-	tags := map[string]string{
+	// Setup mock tag maps
+	originalTags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
+	tags := maps.Clone(originalTags)
 
 	// Mock Now
 	now := time.Now()
@@ -941,6 +1206,7 @@ func TestPollEvents(t *testing.T) {
 		context.Background(),
         mockIntegration,
         mockClient,
+		originalTags,
         tags,
 	)
 
@@ -1014,8 +1280,6 @@ func TestPollEvents(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1031,6 +1295,38 @@ func TestPollEvents(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify timestamp
@@ -1236,7 +1532,6 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -1330,8 +1625,6 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1347,6 +1640,38 @@ func TestCollectSparkAppExecutorMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify a few executor attributes to ensure values are correctly
@@ -1483,7 +1808,6 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -1732,8 +2056,6 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -1749,6 +2071,38 @@ func TestCollectSparkAppJobMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify event
@@ -1945,7 +2299,6 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -2762,8 +3115,6 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -2779,6 +3130,38 @@ func TestCollectSparkAppStageMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify event
@@ -3252,7 +3635,6 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 	// Setup mock tag map
 	tags := map[string]string{
 		"environment": "test",
-		"cluster":     "spark-test",
 	}
 
 	// Mock Now
@@ -3501,8 +3883,6 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 		assert.Equal(t, "Test Spark App", event.Attributes["sparkAppName"])
 		assert.Contains(t, event.Attributes, "environment")
 		assert.Equal(t, "test", event.Attributes["environment"])
-		assert.Contains(t, event.Attributes, "cluster")
-		assert.Equal(t, "spark-test", event.Attributes["cluster"])
 
 		// Verify workspace attributes
 		assert.Contains(t, event.Attributes, "databricksWorkspaceId")
@@ -3518,6 +3898,38 @@ func TestCollectSparkAppRDDMetrics(t *testing.T) {
 			t,
 			"https://foo.fakedomain.local",
 			event.Attributes["databricksWorkspaceUrl"],
+		)
+
+		// Verify cluster attributes
+		assert.Contains(t, event.Attributes, "databricksClusterId")
+		assert.Equal(
+			t,
+			"fake-cluster-id",
+			event.Attributes["databricksClusterId"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterName")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksClusterName"],
+		)
+		assert.Contains(t, event.Attributes, "databricksclustername")
+		assert.Equal(
+			t,
+			"fake-cluster-name",
+			event.Attributes["databricksclustername"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterSource")
+		assert.Equal(
+			t,
+			"fake-cluster-source",
+			event.Attributes["databricksClusterSource"],
+		)
+		assert.Contains(t, event.Attributes, "databricksClusterInstancePoolId")
+		assert.Equal(
+			t,
+			"fake-cluster-instance-pool-id",
+			event.Attributes["databricksClusterInstancePoolId"],
 		)
 
 		// Verify RDD attributes (on all 3 RDD event typoes)
@@ -3674,4 +4086,66 @@ func TestShouldReportSkippedStage_CompletedJobsEmpty(t *testing.T) {
     	shouldReport,
     	"Stage should not be reported if completedJobs is empty",
     )
+}
+
+func TestGetClusterId_NoConfigNoTag(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Setup empty mock tag map
+	mockTags := make(map[string]string)
+
+	// Execute the function under test
+	clusterId := getClusterId(mockTags)
+
+	// Assert that the cluster ID is empty
+	assert.Equal(
+		t,
+		"",
+		clusterId,
+		"Expected cluster ID to be empty when no config and no tag is present",
+	)
+}
+
+func TestGetClusterId_FromConfig(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Set the databricks cluster ID
+	viper.Set("spark.databricks.clusterId", "fake-cluster-id")
+
+	// Setup empty mock tag map
+	mockTags := make(map[string]string)
+
+	// Execute the function under test
+	clusterId := getClusterId(mockTags)
+
+	// Assert that the cluster ID is correct
+	assert.Equal(
+		t,
+		"fake-cluster-id",
+		clusterId,
+		"Expected cluster ID to be retrieved from Viper config",
+	)
+}
+
+func TestGetClusterId_FromTag(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Setup mock tag map with databricksclusterid tag
+	mockTags := map[string]string{
+		"databricksclusterid": "fake-cluster-id",
+	}
+
+	// Execute the function under test
+	clusterId := getClusterId(mockTags)
+
+	// Assert that the cluster ID is correct
+	assert.Equal(
+		t,
+		"fake-cluster-id",
+		clusterId,
+		"Expected cluster ID to be retrieved from databricksclusterid tag",
+	)
 }

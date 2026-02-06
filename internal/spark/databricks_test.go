@@ -37,6 +37,43 @@ func setupMockWorkspace() (*databricks.MockWorkspace, func()) {
 	}
 }
 
+func setupMockClusterInfo() func() {
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+		*databricks.ClusterInfo,
+		error,
+	) {
+		return &databricks.ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			Creator:        "fake-cluster-creator",
+			InstancePoolId: "fake-cluster-instance-pool-id",
+			SingleUserName: "fake-cluster-single-user-name",
+		}, nil
+	}
+
+	// Return a teardown function to restore the original GetClusterInfoById
+	return func() {
+		databricks.GetClusterInfoById = originalGetClusterInfoById
+	}
+}
+
+// Helper function to create a new DatabricksSparkEventDecorator with a fake
+// cluster ID for tests
+func newDatabricksSparkEventDecorator() (
+	*DatabricksSparkEventDecorator,
+	error,
+) {
+	return NewDatabricksSparkEventDecorator(
+		context.Background(),
+		"fake-cluster-id",
+	)
+}
+
 func TestParseDatabricksSparkJobGroup(t *testing.T) {
 	// Reset viper config to ensure clean test state
 	viper.Reset()
@@ -141,8 +178,15 @@ func TestNewDatabricksSparkEventDecorator(t *testing.T) {
 	mock, teardown := setupMockWorkspace()
 	defer teardown()
 
-	// Execute NewDatabricksEventDecorator with default configuration
-	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
+	// Execute the function under test
+	decorator, err := NewDatabricksSparkEventDecorator(
+		context.Background(),
+		"fake-cluster-id",
+	)
 
 	// Verify results
 	assert.NotNil(t, decorator)
@@ -154,6 +198,76 @@ func TestNewDatabricksSparkEventDecorator(t *testing.T) {
 	assert.Equal(t, int64(12345), decorator.workspaceInfo.Id)
 	assert.Equal(t, "https://foo.fakedomain.local", decorator.workspaceInfo.Url)
 	assert.Equal(t, "foo.fakedomain.local", decorator.workspaceInfo.InstanceName)
+	assert.NotNil(t, decorator.clusterInfo)
+	assert.Equal(t, "fake-cluster-id", decorator.clusterId)
+	assert.Equal(t, "fake-cluster-name", decorator.clusterInfo.Name)
+	assert.Equal(t, "fake-cluster-source", decorator.clusterInfo.Source)
+	assert.Equal(t, "fake-cluster-creator", decorator.clusterInfo.Creator)
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		decorator.clusterInfo.InstancePoolId,
+	)
+	assert.Equal(
+		t,
+		"fake-cluster-single-user-name",
+		decorator.clusterInfo.SingleUserName,
+	)
+}
+
+func TestNewDatabricksSparkEventDecorator_EmptyClusterId(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Setup mock workspace
+	mock, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Setup a tracker for GetClusterInfoById calls
+	getClusterInfoByIdCalled := false
+
+	// Mock the GetClusterInfoById to track calls
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	defer func() {
+		databricks.GetClusterInfoById = originalGetClusterInfoById
+	}()
+
+	databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+		*databricks.ClusterInfo,
+		error,
+	) {
+		getClusterInfoByIdCalled = true
+		return &databricks.ClusterInfo{
+			Name:           "fake-cluster-name",
+			Source:         "fake-cluster-source",
+			Creator:        "fake-cluster-creator",
+			InstancePoolId: "fake-cluster-instance-pool-id",
+			SingleUserName: "fake-cluster-single-user-name",
+		}, nil
+	}
+
+	// Execute the function under test with an empty cluster ID
+	decorator, err := NewDatabricksSparkEventDecorator(context.Background(), "")
+
+	// Verify results
+	assert.NotNil(t, decorator)
+	assert.NoError(t, err)
+	assert.Equal(t, decorator.w, mock)
+	assert.NotNil(t, decorator.stageIdsToJobs)
+	assert.Empty(t, decorator.stageIdsToJobs)
+	assert.NotNil(t, decorator.workspaceInfo)
+	assert.Equal(t, int64(12345), decorator.workspaceInfo.Id)
+	assert.Equal(t, "https://foo.fakedomain.local", decorator.workspaceInfo.Url)
+	assert.Equal(t, "foo.fakedomain.local", decorator.workspaceInfo.InstanceName)
+	// GetClusterInfoById should not be called since an empty cluster ID was
+	// provided.
+	assert.False(t, getClusterInfoByIdCalled)
+	assert.Nil(t, decorator.clusterInfo)
+	assert.Equal(t, "", decorator.clusterId)
 }
 
 func TestNewDatabricksSparkEventDecorator_NewDatabricksWorkspaceError(t *testing.T) {
@@ -179,7 +293,10 @@ func TestNewDatabricksSparkEventDecorator_NewDatabricksWorkspaceError(t *testing
 	}
 
 	// Execute the function under test
-	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, err := NewDatabricksSparkEventDecorator(
+		context.Background(),
+		"fake-cluster-id",
+	)
 
 	// Verify results
 	assert.Error(t, err)
@@ -218,7 +335,53 @@ func TestNewDatabricksSparkEventDecorator_GetWorkspaceInfoError(t *testing.T) {
 	}
 
 	// Execute the function under test
-	decorator, err := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, err := NewDatabricksSparkEventDecorator(
+		context.Background(),
+		"fake-cluster-id",
+	)
+
+	// Verify results
+	assert.Error(t, err)
+	assert.Nil(t, decorator, "Should return nil when error occurs")
+	assert.Equal(t, expectedError, err.Error())
+}
+
+func TestNewDatabricksSparkEventDecorator_GetClusterInfoError(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Setup expected error message
+	expectedError := "error getting cluster info"
+
+	// Setup mock workspace
+	_, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Save original GetClusterInfoById function and setup a defer function
+	// to restore after the test
+	originalGetClusterInfoById := databricks.GetClusterInfoById
+	defer func() {
+        databricks.GetClusterInfoById = originalGetClusterInfoById
+    }()
+
+
+	// Setup GetClusterInfoById to return an error
+    databricks.GetClusterInfoById = func(
+		ctx context.Context,
+		w databricks.DatabricksWorkspace,
+		clusterId string,
+	) (
+        *databricks.ClusterInfo,
+        error,
+    ) {
+		return nil, errors.New(expectedError)
+	}
+
+	// Execute the function under test
+	decorator, err := NewDatabricksSparkEventDecorator(
+		context.Background(),
+		"fake-cluster-id",
+	)
 
 	// Verify results
 	assert.Error(t, err)
@@ -234,11 +397,15 @@ func TestDecorate(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test with no job info
 	decorator.decorate(nil, attrs)
@@ -254,6 +421,72 @@ func TestDecorate(t *testing.T) {
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
 	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
+	)
+	assert.NotContains(t, attrs, "databricksJobId")
+	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
+	assert.NotContains(t, attrs, "databricksPipelineId")
+	assert.NotContains(t, attrs, "databricksPipelineUpdateId")
+	assert.NotContains(t, attrs, "databricksPipelineFlowId")
+}
+
+func TestDecorate_NoClusterInfo(t *testing.T) {
+	// Reset viper config to ensure clean test state
+	viper.Reset()
+
+	// Setup mock workspace
+	_, teardown := setupMockWorkspace()
+	defer teardown()
+
+	// Setup the attributes map
+	attrs := make(map[string]interface{})
+
+	// Create the decorator instance with an empty cluster ID
+	decorator, _ := NewDatabricksSparkEventDecorator(context.Background(), "")
+
+	// Execute the function under test with no job info
+	decorator.decorate(nil, attrs)
+
+	// Verify results
+	assert.Contains(t, attrs, "databricksWorkspaceId")
+	assert.Equal(t, int64(12345), attrs["databricksWorkspaceId"])
+	assert.Contains(t, attrs, "databricksWorkspaceName")
+	assert.Equal(t, "foo.fakedomain.local", attrs["databricksWorkspaceName"])
+	assert.Contains(t, attrs, "databricksWorkspaceUrl")
+	assert.Equal(
+		t,
+		"https://foo.fakedomain.local",
+		attrs["databricksWorkspaceUrl"],
+	)
+	assert.NotContains(t, attrs, "databricksClusterId")
+	assert.NotContains(t, attrs, "databricksClusterName")
+	assert.NotContains(t, attrs, "databricksclustername")
+	assert.NotContains(t, attrs, "databricksClusterSource")
+	assert.NotContains(t, attrs, "databricksClusterInstancePoolId")
 	assert.NotContains(t, attrs, "databricksJobId")
 	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
 	assert.NotContains(t, attrs, "databricksPipelineId")
@@ -269,6 +502,10 @@ func TestDecorate_Job(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
@@ -282,7 +519,7 @@ func TestDecorate_Job(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test with job info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -297,6 +534,32 @@ func TestDecorate_Job(t *testing.T) {
 		t,
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
+	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
 	)
 	assert.Contains(t, attrs, "databricksJobId")
 	assert.Equal(t, int64(12345), attrs["databricksJobId"])
@@ -315,6 +578,10 @@ func TestDecorate_Pipeline(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
@@ -328,7 +595,7 @@ func TestDecorate_Pipeline(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test with pipeline info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -343,6 +610,32 @@ func TestDecorate_Pipeline(t *testing.T) {
 		t,
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
+	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
 	)
 	assert.NotContains(t, attrs, "databricksJobId")
 	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
@@ -360,6 +653,10 @@ func TestDecorate_PipelineUpdate(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
@@ -373,7 +670,7 @@ func TestDecorate_PipelineUpdate(t *testing.T) {
 	}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test with pipeline update info
 	decorator.decorate(sparkJobInfo, attrs)
@@ -388,6 +685,32 @@ func TestDecorate_PipelineUpdate(t *testing.T) {
 		t,
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
+	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
 	)
 	assert.NotContains(t, attrs, "databricksJobId")
 	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
@@ -407,6 +730,10 @@ func TestDecorateExecutor(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
@@ -414,7 +741,7 @@ func TestDecorateExecutor(t *testing.T) {
 	sparkExecutor := &SparkExecutor{}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test
 	decorator.DecorateExecutor(sparkExecutor, attrs)
@@ -429,6 +756,32 @@ func TestDecorateExecutor(t *testing.T) {
 		t,
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
+	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
 	)
 	assert.NotContains(t, attrs, "databricksJobId")
 	assert.NotContains(t, attrs, "databricksJobRunTaskRunId")
@@ -485,6 +838,10 @@ func TestDecorateJob(t *testing.T) {
 			_, teardown := setupMockWorkspace()
 			defer teardown()
 
+			// Setup mock cluster info
+			teardown2 := setupMockClusterInfo()
+			defer teardown2()
+
 			// Setup the attributes map
 			attrs := make(map[string]interface{})
 
@@ -495,7 +852,7 @@ func TestDecorateJob(t *testing.T) {
 			}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+			decorator, _ := newDatabricksSparkEventDecorator()
 
 			// Execute the function under test
 			decorator.DecorateJob(sparkJob, attrs)
@@ -514,6 +871,33 @@ func TestDecorateJob(t *testing.T) {
 				t,
 				"https://foo.fakedomain.local",
 				attrs["databricksWorkspaceUrl"],
+			)
+
+			assert.Contains(t, attrs, "databricksClusterId")
+			assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+			assert.Contains(t, attrs, "databricksClusterName")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksClusterName"],
+			)
+			assert.Contains(t, attrs, "databricksclustername")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksclustername"],
+			)
+			assert.Contains(t, attrs, "databricksClusterSource")
+			assert.Equal(
+				t,
+				"fake-cluster-source",
+				attrs["databricksClusterSource"],
+			)
+			assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+			assert.Equal(
+				t,
+				"fake-cluster-instance-pool-id",
+				attrs["databricksClusterInstancePoolId"],
 			)
 
 			if tt.expectDecoration {
@@ -641,6 +1025,10 @@ func TestDecorateStage(t *testing.T) {
 			_, teardown := setupMockWorkspace()
 			defer teardown()
 
+			// Setup mock cluster info
+			teardown2 := setupMockClusterInfo()
+			defer teardown2()
+
 			// Setup the attributes map
 			attrs := make(map[string]interface{})
 
@@ -650,7 +1038,7 @@ func TestDecorateStage(t *testing.T) {
 			}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+			decorator, _ := newDatabricksSparkEventDecorator()
 
 			// Setup the stage map
 			tt.setupStageMap(decorator.stageIdsToJobs)
@@ -672,6 +1060,33 @@ func TestDecorateStage(t *testing.T) {
 				t,
 				"https://foo.fakedomain.local",
 				attrs["databricksWorkspaceUrl"],
+			)
+
+			assert.Contains(t, attrs, "databricksClusterId")
+			assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+			assert.Contains(t, attrs, "databricksClusterName")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksClusterName"],
+			)
+			assert.Contains(t, attrs, "databricksclustername")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksclustername"],
+			)
+			assert.Contains(t, attrs, "databricksClusterSource")
+			assert.Equal(
+				t,
+				"fake-cluster-source",
+				attrs["databricksClusterSource"],
+			)
+			assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+			assert.Equal(
+				t,
+				"fake-cluster-instance-pool-id",
+				attrs["databricksClusterInstancePoolId"],
 			)
 
 			if tt.expectDecoration {
@@ -775,6 +1190,10 @@ func TestDecorateTask(t *testing.T) {
 			_, teardown := setupMockWorkspace()
 			defer teardown()
 
+			// Setup mock cluster info
+			teardown2 := setupMockClusterInfo()
+			defer teardown2()
+
 			// Setup the attributes map
 			attrs := make(map[string]interface{})
 
@@ -787,7 +1206,7 @@ func TestDecorateTask(t *testing.T) {
 			sparkTask := &SparkTask{}
 
 			// Create the decorator instance
-			decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+			decorator, _ := newDatabricksSparkEventDecorator()
 
 			// Setup the stage map
 			tt.setupStageMap(decorator.stageIdsToJobs)
@@ -809,6 +1228,33 @@ func TestDecorateTask(t *testing.T) {
 				t,
 				"https://foo.fakedomain.local",
 				attrs["databricksWorkspaceUrl"],
+			)
+
+			assert.Contains(t, attrs, "databricksClusterId")
+			assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+			assert.Contains(t, attrs, "databricksClusterName")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksClusterName"],
+			)
+			assert.Contains(t, attrs, "databricksclustername")
+			assert.Equal(
+				t,
+				"fake-cluster-name",
+				attrs["databricksclustername"],
+			)
+			assert.Contains(t, attrs, "databricksClusterSource")
+			assert.Equal(
+				t,
+				"fake-cluster-source",
+				attrs["databricksClusterSource"],
+			)
+			assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+			assert.Equal(
+				t,
+				"fake-cluster-instance-pool-id",
+				attrs["databricksClusterInstancePoolId"],
 			)
 
 			// Verify results
@@ -856,6 +1302,10 @@ func TestDecorateRDDs(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
@@ -863,7 +1313,7 @@ func TestDecorateRDDs(t *testing.T) {
 	sparkRDD := &SparkRDD{}
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test
 	decorator.DecorateRDD(sparkRDD, attrs)
@@ -883,6 +1333,32 @@ func TestDecorateRDDs(t *testing.T) {
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
 	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
+	)
 }
 
 func TestDecorateEvent(t *testing.T) {
@@ -893,11 +1369,15 @@ func TestDecorateEvent(t *testing.T) {
 	_, teardown := setupMockWorkspace()
 	defer teardown()
 
+	// Setup mock cluster info
+	teardown2 := setupMockClusterInfo()
+	defer teardown2()
+
 	// Setup the attributes map
 	attrs := make(map[string]interface{})
 
 	// Create the decorator instance
-	decorator, _ := NewDatabricksSparkEventDecorator(context.Background())
+	decorator, _ := newDatabricksSparkEventDecorator()
 
 	// Execute the function under test
 	decorator.DecorateEvent(attrs)
@@ -916,5 +1396,31 @@ func TestDecorateEvent(t *testing.T) {
 		t,
 		"https://foo.fakedomain.local",
 		attrs["databricksWorkspaceUrl"],
+	)
+	assert.Contains(t, attrs, "databricksClusterId")
+	assert.Equal(t, "fake-cluster-id", attrs["databricksClusterId"])
+	assert.Contains(t, attrs, "databricksClusterName")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksClusterName"],
+	)
+	assert.Contains(t, attrs, "databricksclustername")
+	assert.Equal(
+		t,
+		"fake-cluster-name",
+		attrs["databricksclustername"],
+	)
+	assert.Contains(t, attrs, "databricksClusterSource")
+	assert.Equal(
+		t,
+		"fake-cluster-source",
+		attrs["databricksClusterSource"],
+	)
+	assert.Contains(t, attrs, "databricksClusterInstancePoolId")
+	assert.Equal(
+		t,
+		"fake-cluster-instance-pool-id",
+		attrs["databricksClusterInstancePoolId"],
 	)
 }

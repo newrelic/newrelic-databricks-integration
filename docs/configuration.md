@@ -710,6 +710,52 @@ attributes (such as the [workspace name, URL, and ID](https://docs.databricks.co
 When this parameter is not set, or is set to `standalone`, no additional
 telemetry or attributes are collected.
 
+**NOTE**: The `databricks` value is reserved for
+[local cluster deployments](./installation.md#deploy-the-integration-to-a-databricks-cluster)
+and is automatically configured via the
+[cluster-scoped init script](../init/cluster_init_integration.sh). Spark metric
+collection is not supported for remote deployments. The integration will fail
+to start if this configuration parameter is set to `databricks` and the
+integration is not installed on a Databricks cluster.
+
+#### `databricks`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The parent element for the set of Spark on Databricks configuration parameters | YAML Mapping | N | N/a |
+
+This element groups together the configuration parameters to configure the Spark
+collector when the [`clusterManager`](#clustermanager) is set to `databricks`.
+This configuration parameter and the configuration parameters it contains are
+ignored if the [`clusterManager`](#clustermanager) is not set to `databricks`.
+
+##### `clusterId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| The ID of the Databricks cluster on which the Spark deployment is running | string | N | N/a |
+
+This configuration parameter specifies the ID of the Databricks
+[cluster](https://docs.databricks.com/en/getting-started/concepts.html#cluster)
+on which the Spark deployment is running.
+
+**NOTE:**
+* This configuration parameter is reserved for
+[local cluster deployments](./installation.md#deploy-the-integration-to-a-databricks-cluster)
+and is automatically configured via the
+[cluster-scoped init script](../init/cluster_init_integration.sh). Spark metric
+collection is not supported for remote deployments.
+* The cluster ID for a Databricks cluster can be found by performing the
+  following steps.
+
+  1. Click "Compute" in the workspace sidebar
+  1. Select the "All-purpose compute" or "Job compute" tab as appropriate
+  1. Click on the name of the compute
+  1. In the path portion of the URL, the cluster ID for the compute is the text
+     after the path `/compute/clusters/`. For example, if the path is
+     `/compute/clusters/0000-123456-abcdefgh`, the cluster ID is
+     `0000-123456-abcdefgh`.
+
 ### `tags`
 
 | Description | Valid Values | Required | Default |

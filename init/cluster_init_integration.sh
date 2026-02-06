@@ -35,6 +35,7 @@ log:
   format: json
 custom_attributes:
   databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+  databricksWorkspaceName: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   databricksClusterId: $DB_CLUSTER_ID
   databricksClusterName: $DB_CLUSTER_NAME
   databricksIsDriverNode: ${DB_IS_DRIVER,,}
@@ -119,6 +120,7 @@ EOM
     Name record_modifier
     Match *
     Record databricksWorkspaceHost $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+    Record databricksWorkspaceName $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
     Record databricksClusterId $DB_CLUSTER_ID
     Record databricksClusterName $DB_CLUSTER_NAME
     Record databricksIsDriverNode ${DB_IS_DRIVER,,}
@@ -242,6 +244,7 @@ EOM
     Name record_modifier
     Match *
     Record databricksWorkspaceHost $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
+    Record databricksWorkspaceName $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
     Record databricksClusterId $DB_CLUSTER_ID
     Record databricksClusterName $DB_CLUSTER_NAME
     Record databricksIsDriverNode ${DB_IS_DRIVER,,}
@@ -401,12 +404,8 @@ databricks:
 spark:
   webUiUrl: http://{UI_HOST}:{UI_PORT}
   clusterManager: databricks
-tags:
-  databricksWorkspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
-  databricksClusterId: $DB_CLUSTER_ID
-  databricksClusterName: $DB_CLUSTER_NAME
-  databricksIsDriverNode: ${DB_IS_DRIVER,,}
-  databricksIsJobCluster: ${DB_IS_JOB_CLUSTER,,}
+  databricks:
+    clusterId: $DB_CLUSTER_ID
 EOF
 
 chmod 600 $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml

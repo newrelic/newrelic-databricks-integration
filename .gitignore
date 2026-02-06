@@ -132,3 +132,4 @@ cf-params.json
 __tools/
 main
 .DS_Store
+coverage.out

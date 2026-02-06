@@ -43,6 +43,16 @@ bin/$(BINARY_NAME):
 
 compile: bin/$(BINARY_NAME)
 
+test:
+	@go test ./... -coverprofile=coverage.out
+	@GO_COVER_IGNORE_SPEC_PATH=".coverage-ignore.yaml" GO_COVER_IGNORE_COVER_PROFILE_PATH="coverage.out" go-cover-ignore
+	@go tool cover -func=coverage.out | awk '{sub(/^.*\/newrelic-databricks-integration\//,""); print}'
+
+test-html:
+	@go test ./... -coverprofile=coverage.out
+	@GO_COVER_IGNORE_SPEC_PATH=".coverage-ignore.yaml" GO_COVER_IGNORE_COVER_PROFILE_PATH="coverage.out" go-cover-ignore
+	@go tool cover -html=coverage.out
+
 #compile-lambda: bin/$(LAMBDA_BINARY_NAME)
 #
 #compile-docker: bin/docker/$(BINARY_NAME)
@@ -65,4 +75,4 @@ compile: bin/$(BINARY_NAME)
 #	@./scripts/lambda/delete.sh
 #
 #.PHONY: all build clean compile compile-lambda compile-docker docker deploy-lambda update-lambda delete-lambda
-.PHONY: all build clean compile
+.PHONY: all build clean compile test test-html

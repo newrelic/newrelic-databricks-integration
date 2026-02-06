@@ -978,7 +978,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkJob\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n description AS 'Job Description',\n jobId AS 'Spark Job ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Databricks Job ID',\n databricksJobRunTaskRunId as 'Databricks Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}}\nLIMIT MAX "
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkJob\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksClusterName AS Cluster,\n sparkAppName AS 'Spark App Name',\n description AS 'Job Description',\n jobId AS 'Spark Job ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Databricks Job ID',\n databricksJobRunTaskRunId as 'Databricks Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}}\nLIMIT MAX "
               }
             ],
             "platformOptions": {
@@ -1018,7 +1018,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkStage\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n stageId AS 'Spark Stage ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Job ID',\n databricksJobRunTaskRunId as 'Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}}\nLIMIT MAX "
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkStage\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksClusterName AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n stageId AS 'Spark Stage ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Job ID',\n databricksJobRunTaskRunId as 'Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}}\nLIMIT MAX "
               }
             ],
             "platformOptions": {
@@ -1058,7 +1058,7 @@
                 "accountIds": [
                   0
                 ],
-                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkTask\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksclustername AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n taskId AS 'Spark Task ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Job ID',\n databricksJobRunTaskRunId as 'Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksclustername = {{cluster}}\nLIMIT MAX "
+                "query": "WITH\n concat(databricksWorkspaceUrl, '/jobs/', databricksJobId, '/runs/', databricksJobRunTaskRunId) AS databricksJobRunURL\nFROM SparkTask\nSELECT\n substring(databricksWorkspaceName, 0, position(databricksWorkspaceName, '.')) AS Workspace,\n databricksClusterName AS Cluster,\n sparkAppName AS 'Spark App Name',\n jobDescription,\n taskId AS 'Spark Task ID',\n duration / 1000 AS Duration,\n databricksJobId AS 'Job ID',\n databricksJobRunTaskRunId as 'Task Run ID',\n databricksJobRunURL AS 'Databricks Link'\nWHERE event = 'complete' AND databricksJobId IS NOT NULL AND databricksJobRunTaskRunId IS NOT NULL AND databricksWorkspaceName = {{workspace}} AND databricksClusterName = {{cluster}}\nLIMIT MAX "
               }
             ],
             "platformOptions": {
