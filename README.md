@@ -55,6 +55,7 @@ below.
 -   [Consumption & Cost Data](./docs/consumption-cost.md)
 -   [Using the CLI](./docs/cli.md)
 -   [Import the Example Dashboards](./docs/example-dashboards.md)
+-   [Troubleshooting](./docs/troubleshooting.md)
 -   [Additional Information](./docs/additional-information.md)
 -   [Contribute to the Integration](./docs/contribute.md)
 

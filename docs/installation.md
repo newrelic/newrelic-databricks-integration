@@ -49,7 +49,7 @@ all-purpose cluster, perform the following steps.
 * `NEW_RELIC_LICENSE_KEY` - Your [New Relic License Key](https://docs.newrelic.com/docs/apis/intro-apis/new-relic-api-keys/#license-key)
 * `NEW_RELIC_ACCOUNT_ID` - Your [New Relic Account ID](https://docs.newrelic.com/docs/accounts/accounts-billing/account-structure/account-id/)
 * `NEW_RELIC_REGION` - The [region](https://docs.newrelic.com/docs/accounts/accounts-billing/account-setup/choose-your-data-center/#regions-availability)
-  of your New Relic account; one of `US` or `EU`
+  of your New Relic account; one of `US` or `EU`. Defaults to `US`.
 * `NEW_RELIC_DATABRICKS_INTERVAL` - The integration collection [interval](./configuration.md#interval),
   in seconds. Defaults to `30`.
 * `NEW_RELIC_DATABRICKS_LOG_LEVEL` - The integration [log level](./configuration.md#level).
@@ -119,6 +119,12 @@ all-purpose cluster, perform the following steps.
   Defaults to `false`.
 * `NEW_RELIC_DATABRICKS_STARTUP_RETRIES` - The number of attempts the startup
   script will make to read the driver environment script. Defaults to `5`.
+* `NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED` - Set to `true` to capture
+  the startup logs and
+  [send them to New Relic Logs](./troubleshooting.md#sending-startup-logs-to-new-relic-logs).
+* `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` - Set to `true` to capture
+  the startup logs and
+  [copy them to DBFS](./troubleshooting.md#copying-startup-logs-to-dbfs).
 
 **NOTE:**
 * In most cases, the [init script](../init/cluster_init_integration.sh) should
@@ -157,6 +163,9 @@ all-purpose cluster, perform the following steps.
   feature and can be accessed via the APM UI for the entity named
   "New Relic Databricks Integration" or via the [New Relic Logs UI](https://docs.newrelic.com/docs/logs/ui-data/use-logs-ui/)
   using the query `entity.name:"New Relic Databricks Integration"`.
+* If `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` is set to `true` but the
+  [DBFS root](https://docs.databricks.com/aws/en/dbfs/#what-is-the-dbfs-root) is
+  not enabled for your account and workspace, the integration may fail to start.
 
 ## Deploy the integration remotely
 

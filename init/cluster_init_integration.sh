@@ -332,7 +332,10 @@ echo "Installing the Databricks Integration..."
 
 # Set environment variables with defaults
 NEW_RELIC_DATABRICKS_INTERVAL=${NEW_RELIC_DATABRICKS_INTERVAL:-30}
+NEW_RELIC_REGION=${NEW_RELIC_REGION:-"US"}
 NEW_RELIC_DATABRICKS_LOG_LEVEL=${NEW_RELIC_DATABRICKS_LOG_LEVEL:-"warn"}
+NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED=${NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED:-"false"}
+NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED=${NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED:-"false"}
 NEW_RELIC_DATABRICKS_USAGE_ENABLED=${NEW_RELIC_DATABRICKS_USAGE_ENABLED:-"false"}
 NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA=${NEW_RELIC_DATABRICKS_USAGE_INCLUDE_IDENTITY_METADATA:-"false"}
 NEW_RELIC_DATABRICKS_USAGE_RUN_TIME=${NEW_RELIC_DATABRICKS_USAGE_RUN_TIME:-"02:00:00"}
@@ -345,7 +348,7 @@ NEW_RELIC_DATABRICKS_QUERY_METRICS_ENABLED=${NEW_RELIC_DATABRICKS_QUERY_METRICS_
 NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA=${NEW_RELIC_DATABRICKS_QUERY_METRICS_INCLUDE_IDENTITY_METADATA:-"false"}
 NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET=${NEW_RELIC_DATABRICKS_QUERY_METRICS_START_OFFSET:-600}
 NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS=${NEW_RELIC_DATABRICKS_QUERY_METRICS_MAX_RESULTS:-100}
-NEW_RELIC_DATABRICKS_STARTUP_RETRIES=${NEW_RELIC_DATABRICKS_STARTUP_RETRIES:-5}
+NEW_RELIC_DATABRICKS_STARTUP_RETRIES=${NEW_RELIC_DATABRICKS_STARTUP_RETRIES:-15}
 
 # Define the version, download dir and target dir
 NEW_RELIC_DATABRICKS_TMP_DIR="/tmp/newrelic-databricks-integration"
@@ -364,6 +367,13 @@ cd $NEW_RELIC_DATABRICKS_TARGET_DIR && mkdir -p configs
 # Create the integration configuration file
 echo "Creating the Databricks Integration config file..."
 
+LOG_FILE_NAME_CONFIG=""
+if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ] || \
+   [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  echo "Configuring Databricks Integration to log to file /tmp/newrelic-databricks-integration.log"
+  LOG_FILE_NAME_CONFIG="fileName: /tmp/newrelic-databricks-integration.log"
+fi
+
 sudo cat <<EOF > $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
 apiKey: $NEW_RELIC_API_KEY
 licenseKey: $NEW_RELIC_LICENSE_KEY
@@ -373,6 +383,7 @@ interval: $NEW_RELIC_DATABRICKS_INTERVAL
 runAsService: true
 log:
   level: $NEW_RELIC_DATABRICKS_LOG_LEVEL
+  $LOG_FILE_NAME_CONFIG
 databricks:
   workspaceHost: $NEW_RELIC_DATABRICKS_WORKSPACE_HOST
   accessToken: "$NEW_RELIC_DATABRICKS_ACCESS_TOKEN"
@@ -419,30 +430,249 @@ sudo cat <<EOM > $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 TRIES=0
 
 while [ \$TRIES -lt $NEW_RELIC_DATABRICKS_STARTUP_RETRIES ]; do
+  echo Attempt \$((TRIES + 1)) of $NEW_RELIC_DATABRICKS_STARTUP_RETRIES to check for /tmp/driver-env.sh...
   if [ ! -e /tmp/driver-env.sh ]; then
     sleep 5
+  else
+    break
   fi
 
   TRIES=\$((TRIES + 1))
 done
 
 if [ ! -e /tmp/driver-env.sh ]; then
-  echo Integration failed to start - missing /tmp/driver-env.sh
+  echo Integration failed to locate /tmp/driver-env.sh after $NEW_RELIC_DATABRICKS_STARTUP_RETRIES attempts, exiting.
   exit 1
 fi
 
+echo Sourcing /tmp/driver-env.sh...
 source /tmp/driver-env.sh
 
+echo Updating integration config with Spark UI host and port from /tmp/driver-env.sh...
 sed -i "s/{UI_HOST}/\$CONF_PUBLIC_DNS/;s/{UI_PORT}/\$CONF_UI_PORT/" \
   $NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml
 
+echo Launching New Relic Databricks Integration...
 $NEW_RELIC_DATABRICKS_TARGET_DIR/newrelic-databricks-integration
 EOM
 
 chmod 500 $NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 
+if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ] || \
+   [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  echo "Creating the Databricks Integration startup helper file..."
+
+  sudo cat <<EOM > $NEW_RELIC_DATABRICKS_TARGET_DIR/startup-helper.sh
+#!/bin/bash
+MESSAGES=()
+TRIES=0
+RESTART_COUNTER=\$(systemctl show newrelic-databricks-integration -p NRestarts --value)
+
+while [ \$TRIES -lt 10 ]; do
+  if [ ! -e /tmp/newrelic-databricks-integration.log ]; then
+    sleep 15
+  else
+    break
+  fi
+
+  TRIES=\$((TRIES + 1))
+done
+
+function send_messages {
+  local messages=("\$@")
+  local ts=\$(date +%s%3N)
+
+  LOG_API_URL="https://log-api.newrelic.com/log/v1"
+  if [ "$NEW_RELIC_REGION" = "EU" ]; then
+    LOG_API_URL="https://log-api.eu.newrelic.com/log/v1"
+  fi
+
+  local payload='
+[{
+  "common": {
+    "attributes": {
+      "databricksLogType": "startup",
+      "databricksStartupAttempt": "'"\$RESTART_COUNTER"'",
+      "databricksWorkspaceName": "$NEW_RELIC_DATABRICKS_WORKSPACE_HOST",
+      "databricksClusterId": "$DB_CLUSTER_ID",
+      "databricksClusterName": "${DB_CLUSTER_NAME//\'/\'\\\'\'}",
+      "databricksIsDriverNode": "${DB_IS_DRIVER,,}",
+      "databricksIsJobCluster": "${DB_IS_JOB_CLUSTER,,}"
+    }
+  },
+  "logs": [
+'
+
+  local first=true
+  for message in "\${messages[@]}"; do
+    if [ "\$first" = true ]; then
+      first=false
+    else
+      payload+=','
+    fi
+
+    msg=\${message//\\\\/\\\\\\\\}
+    msg=\${msg//\\"/\\\\\\"}
+
+    payload+="
+    {
+      \"timestamp\": \$ts,
+      \"message\": \"\$msg\"
+    }"
+  done
+
+  payload+='
+  ]
+}]'
+
+  curl -s -XPOST \
+    -H "Api-Key: $NEW_RELIC_LICENSE_KEY" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    \$LOG_API_URL \
+    -d "\$payload"
+}
+
+if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  mkdir -p /dbfs/tmp/$DB_CLUSTER_ID
+fi
+
+if [ -f /tmp/newrelic-databricks-integration.log ]; then
+  if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+    while IFS= read -r line; do
+      MESSAGES+=("\$line")
+    done < <(head -n 100 /tmp/newrelic-databricks-integration.log)
+  fi
+
+  if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+    cp /tmp/newrelic-databricks-integration.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-integration.log
+  fi
+elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+  MESSAGES+=("Integration log file not found!")
+fi
+
+if [ -f /tmp/newrelic-databricks-start-integration.sh.stdout.log ]; then
+  if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+    while IFS= read -r line; do
+      MESSAGES+=("\$line")
+    done < "/tmp/newrelic-databricks-start-integration.sh.stdout.log"
+  fi
+
+  if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+    cp /tmp/newrelic-databricks-start-integration.sh.stdout.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-start-integration.sh.stdout.log
+  fi
+elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+  MESSAGES+=("Integration startup stdout log file not found!")
+fi
+
+if [ -f /tmp/newrelic-databricks-start-integration.sh.stderr.log ]; then
+  if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+    while IFS= read -r line; do
+      MESSAGES+=("\$line")
+    done < "/tmp/newrelic-databricks-start-integration.sh.stderr.log"
+  fi
+
+  if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+    cp /tmp/newrelic-databricks-start-integration.sh.stderr.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-start-integration.sh.stderr.log
+  fi
+elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+  MESSAGES+=("Integration startup stderr log file not found!")
+fi
+
+CHECKS=()
+
+if [ -d "$NEW_RELIC_DATABRICKS_TARGET_DIR" ]; then
+  CHECKS+=("Integration directory .................... PASS")
+else
+  CHECKS+=("Integration directory .................... FAIL")
+fi
+
+if [ -x "$NEW_RELIC_DATABRICKS_TARGET_DIR/newrelic-databricks-integration" ]; then
+  CHECKS+=("Integration binary ....................... PASS")
+else
+  CHECKS+=("Integration binary ....................... FAIL")
+fi
+
+if [ -x "$NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh" ]; then
+  CHECKS+=("Integration startup script ............... PASS")
+else
+  CHECKS+=("Integration startup script ............... FAIL")
+fi
+
+if [ -f "$NEW_RELIC_DATABRICKS_TARGET_DIR/configs/config.yml" ]; then
+  CHECKS+=("Integration config file .................. PASS")
+else
+  CHECKS+=("Integration config file .................. FAIL")
+fi
+
+if [ -f /etc/newrelic-infra.yml ]; then
+  CHECKS+=("New Relic Infrastructure enabled ......... YES")
+else
+  CHECKS+=("New Relic Infrastructure enabled ......... NO")
+fi
+
+if [ -f /etc/newrelic-infra/logging.d/logging.yml ]; then
+  CHECKS+=("New Relic Infrastructure logs enabled .... YES")
+else
+  CHECKS+=("New Relic Infrastructure logs enabled .... NO")
+fi
+
+if [ "\$(ps -ef | grep '/databricks/driver/newrelic/newrelic-databricks-integration' | grep -v grep | wc -l)" -eq 1 ]; then
+  CHECKS+=("Integration process running .............. YES")
+else
+  CHECKS+=("Integration process running .............. NO")
+fi
+
+if [ "\$(ps -ef | grep '/usr/bin/newrelic-infra' | grep -v grep | wc -l)" -eq 2 ]; then
+  CHECKS+=("Infrastructure processes running ......... YES")
+else
+  CHECKS+=("Infrastructure processes running ......... NO")
+fi
+
+if [ "\$(ps -ef | grep '/opt/fluent-bit/bin/fluent-bit' | grep -v grep | wc -l)" -eq 1 ]; then
+  CHECKS+=("Fluent Bit process running ............... YES")
+else
+  CHECKS+=("Fluent Bit process running ............... NO")
+fi
+
+if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
+  for check in "\${CHECKS[@]}"; do
+    MESSAGES+=("\$check")
+  done
+
+  send_messages "\${MESSAGES[@]}"
+fi
+
+if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  touch /tmp/newrelic-databricks-integration-startup-checks.log
+
+  for check in "\${CHECKS[@]}"; do
+    echo "\$check" >> /tmp/newrelic-databricks-integration-startup-checks.log
+  done
+
+  cp /tmp/newrelic-databricks-integration-startup-checks.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-integration-startup-checks.log
+fi
+EOM
+  chmod 500 $NEW_RELIC_DATABRICKS_TARGET_DIR/startup-helper.sh
+fi
+
 # Create the systemd service file
 echo "Creating the Databricks Integration systemd service file..."
+
+SYSTEMD_STARTUP_LOGS_CONFIG=""
+if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ] || \
+   [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  # Setup the systemd service to log to files when send or copy startup logs is
+  # enabled, and to run the startup helper script to send and/or copy the
+  # startup logs and checks after starting the service.
+  echo "Generating the Databricks Integration service startup logs configuration..."
+
+  SYSTEMD_STARTUP_LOGS_CONFIG="
+StandardOutput=append:/tmp/newrelic-databricks-start-integration.sh.stdout.log
+StandardError=append:/tmp/newrelic-databricks-start-integration.sh.stderr.log
+ExecStartPost=$NEW_RELIC_DATABRICKS_TARGET_DIR/startup-helper.sh
+TimeoutStartSec=5min"
+fi
 
 sudo cat <<EOM > /etc/systemd/system/newrelic-databricks-integration.service
 [Unit]
@@ -454,6 +684,7 @@ RuntimeDirectory=newrelic-databricks-integration
 WorkingDirectory=$NEW_RELIC_DATABRICKS_TARGET_DIR
 Type=exec
 ExecStart=$NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
+$SYSTEMD_STARTUP_LOGS_CONFIG
 MemoryLimit=1G
 # MemoryMax is only supported in systemd > 230 and replaces MemoryLimit. Some cloud dists do not have that version
 # MemoryMax=1G
@@ -461,7 +692,6 @@ Restart=always
 RestartSec=30
 StartLimitInterval=200
 StartLimitBurst=5
-PIDFile=/run/newrelic-databricks-integration/newrelic-databricks-integration.pid
 
 [Install]
 WantedBy=multi-user.target
