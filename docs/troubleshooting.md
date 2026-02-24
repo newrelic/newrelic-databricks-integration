@@ -337,86 +337,11 @@ to see the error.
 
 **Solution:**
 
-To use _Azure managed identity authentication_, perform the following steps:
-
-If you have deployed the integration
-[to a Databricks cluster](./installation.md#deploy-the-integration-to-a-databricks-cluster):
-
-1. Follow the steps to
-   [set compute environment variables](https://docs.databricks.com/en/compute/configure.html#environment-variables)
-   to add or update the compute environment variables as follows:
-
-   ```sh
-   ARM_USE_MSI=true
-   ARM_CLIENT_ID=[YOUR_MANAGED_IDENTITY_CLIENT_ID]
-   DATABRICKS_AZURE_RESOURCE_ID=[YOUR_DATABRICKS_AZURE_RESOURCE_ID]
-   ```
-
-1. Ensure the environment variables `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID` and
-   `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET` are not set.
-1. If your cluster is not running, click on the button labeled `Confirm` to
-   save your changes. Then, restart the cluster. If your cluster is already
-   running, click on the button labeled `Confirm and restart` to save your
-   changes and restart the cluster.
-
-If you have deployed the integration
-[remotely](./installation.md#deploy-the-integration-remotely):
-
-1. Use the mechanism appropriate for your deployment to ensure the following
-   environment variables are set in the environment where the integration will
-   be run:
-
-   ```sh
-   ARM_USE_MSI=true
-   ARM_CLIENT_ID=[YOUR_MANAGED_IDENTITY_CLIENT_ID]
-   DATABRICKS_AZURE_RESOURCE_ID=[YOUR_DATABRICKS_AZURE_RESOURCE_ID]
-   ```
-
-1. Ensure the [`oauthClientId`](./configuration.md#oauthclientid) and
-   [`oauthClientSecret`](./configuration.md#oauthclientsecret) configuration
-   parameters (or the corresponding environment variables) are not set.
-1. Restart the integration.
-
-To use _Microsoft Entra service principal authentication_, perform the following
-steps:
-
-If you have deployed the integration
-[to a Databricks cluster](./installation.md#deploy-the-integration-to-a-databricks-cluster):
-
-1. Follow the steps to
-   [set compute environment variables](https://docs.databricks.com/en/compute/configure.html#environment-variables)
-   to add or update the compute environment variables as follows:
-
-   ```sh
-   ARM_TENANT_ID=[YOUR_ENTRA_TENANT_ID]
-   ARM_CLIENT_ID=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_ID]
-   ARM_CLIENT_SECRET=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_SECRET]
-   ```
-
-1. Ensure the environment variables `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID` and
-   `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET` are not set.
-1. If your cluster is not running, click on the button labeled `Confirm` to
-   save your changes. Then, restart the cluster. If your cluster is already
-   running, click on the button labeled `Confirm and restart` to save your
-   changes and restart the cluster.
-
-If you have deployed the integration
-[remotely](./installation.md#deploy-the-integration-remotely):
-
-1. Use the mechanism appropriate for your deployment to ensure the following
-   environment variables are set in the environment where the integration will
-   be run:
-
-   ```sh
-   ARM_TENANT_ID=[YOUR_ENTRA_TENANT_ID]
-   ARM_CLIENT_ID=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_ID]
-   ARM_CLIENT_SECRET=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_SECRET]
-   ```
-
-1. Ensure the [`oauthClientId`](./configuration.md#oauthclientid) and
-   [`oauthClientSecret`](./configuration.md#oauthclientsecret) configuration
-   parameters (or the corresponding environment variables) are not set.
-1. Restart the integration.
+Using
+[Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+or
+[Microsoft Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp)
+to authenticate with Azure Databricks is currently not supported.
 
 #### Other Causes of Missing Data for On-cluster Deployments
 
