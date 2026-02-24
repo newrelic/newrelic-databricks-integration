@@ -739,8 +739,9 @@ following steps to copy the startup logs from DBFS to a Unity Catalog volume.
 1. Navigate to the New Relic Diagnostics notebook within your workspace.
 1. Make sure to execute the first cell in the notebook if you have not already
    done so.
-1. Use the notebook widget parameters to set the catalog, schema, and volume
-   to the volume where the startup logs should be copied.
+1. Use the notebook widget parameters to specify the cluster ID and the
+   destination catalog, schema, and volume where the startup logs will be
+   stored.
 1. Locate the cell with the instructions to
    "Copy Databricks Integration startup logs to a volume".
 1. Execute the cell beneath it containing the Python code to copy the startup
@@ -775,8 +776,8 @@ steps.
    within your workspace.
 1. Make sure to execute the first cell in the notebook if you have not already
    done so.
-1. Use the notebook widget parameters to set the catalog, schema, and volume
-   used when configuring compute log delivery.
+1. Use the notebook widget parameters to provide the cluster ID and the specific
+   catalog, schema, and volume used when compute log delivery was configured.
 1. Locate the cell with the instruction to
    "Find the latest init script directories".
 1. Execute the cell beneath it containing the Python code to locate the latest
