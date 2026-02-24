@@ -829,6 +829,11 @@ following steps to copy the startup logs from DBFS to a Unity Catalog volume.
    [sending your startup logs to New Relic Logs](#sending-startup-logs-to-new-relic-logs)
    instead.
 
+**NOTE:** If `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` is set to `true`
+but the
+[DBFS root](https://docs.databricks.com/aws/en/dbfs/#what-is-the-dbfs-root) is
+not enabled for your account and workspace, the integration may fail to start.
+
 #### Collecting cluster init script logs
 
 In addition to the debug and startup logs for the integration, the cluster

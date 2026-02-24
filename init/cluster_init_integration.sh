@@ -533,6 +533,10 @@ function send_messages {
     -d "\$payload"
 }
 
+if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
+  mkdir -p /dbfs/tmp/$DB_CLUSTER_ID
+fi
+
 if [ -f /tmp/newrelic-databricks-integration.log ]; then
   if [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
     while IFS= read -r line; do
@@ -541,7 +545,7 @@ if [ -f /tmp/newrelic-databricks-integration.log ]; then
   fi
 
   if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
-    cp /tmp/newrelic-databricks-integration.log /dbfs/tmp/newrelic-databricks-integration.log
+    cp /tmp/newrelic-databricks-integration.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-integration.log
   fi
 elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
   MESSAGES+=("Integration log file not found!")
@@ -555,7 +559,7 @@ if [ -f /tmp/newrelic-databricks-start-integration.sh.stdout.log ]; then
   fi
 
   if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
-    cp /tmp/newrelic-databricks-start-integration.sh.stdout.log /dbfs/tmp/newrelic-databricks-start-integration.sh.stdout.log
+    cp /tmp/newrelic-databricks-start-integration.sh.stdout.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-start-integration.sh.stdout.log
   fi
 elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
   MESSAGES+=("Integration startup stdout log file not found!")
@@ -569,7 +573,7 @@ if [ -f /tmp/newrelic-databricks-start-integration.sh.stderr.log ]; then
   fi
 
   if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
-    cp /tmp/newrelic-databricks-start-integration.sh.stderr.log /dbfs/tmp/newrelic-databricks-start-integration.sh.stderr.log
+    cp /tmp/newrelic-databricks-start-integration.sh.stderr.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-start-integration.sh.stderr.log
   fi
 elif [ "$NEW_RELIC_DATABRICKS_SEND_STARTUP_LOGS_ENABLED" = "true" ]; then
   MESSAGES+=("Integration startup stderr log file not found!")
@@ -646,7 +650,7 @@ if [ "$NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED" = "true" ]; then
     echo "\$check" >> /tmp/newrelic-databricks-integration-startup-checks.log
   done
 
-  cp /tmp/newrelic-databricks-integration-startup-checks.log /dbfs/tmp/newrelic-databricks-integration-startup-checks.log
+  cp /tmp/newrelic-databricks-integration-startup-checks.log /dbfs/tmp/$DB_CLUSTER_ID/newrelic-databricks-integration-startup-checks.log
 fi
 EOM
   chmod 500 $NEW_RELIC_DATABRICKS_TARGET_DIR/startup-helper.sh
@@ -670,27 +674,6 @@ ExecStartPost=$NEW_RELIC_DATABRICKS_TARGET_DIR/startup-helper.sh
 TimeoutStartSec=5min"
 fi
 
-ARM_ENV_CONFIG=""
-if [ "$ARM_USE_MSI" = "true" ]; then
-  # Setup the systemd environment variable definitions to enable Databricks Go
-  # SDK authentication using a Microsoft Entra managed identity.
-  echo "Generating the Databricks Integration service Entra managed identity configuration..."
-
-  ARM_ENV_CONFIG="
-Environment=ARM_USE_MSI=true
-Environment=ARM_CLIENT_ID=${ARM_CLIENT_ID}
-Environment=DATABRICKS_AZURE_RESOURCE_ID=${DATABRICKS_AZURE_RESOURCE_ID}"
-elif [ -n "$ARM_CLIENT_SECRET" ]; then
-  # Setup the systemd environment variable definitions to enable Databricks Go
-  # SDK authentication using a Microsoft Entra standard service principal.
-  echo "Generating the Databricks Integration service Entra service principal configuration..."
-
-  ARM_ENV_CONFIG="
-Environment=ARM_TENANT_ID=${ARM_TENANT_ID}
-Environment=ARM_CLIENT_ID=${ARM_CLIENT_ID}
-Environment=ARM_CLIENT_SECRET=${ARM_CLIENT_SECRET}"
-fi
-
 sudo cat <<EOM > /etc/systemd/system/newrelic-databricks-integration.service
 [Unit]
 Description=New Relic Databricks Integration
@@ -702,7 +685,6 @@ WorkingDirectory=$NEW_RELIC_DATABRICKS_TARGET_DIR
 Type=exec
 ExecStart=$NEW_RELIC_DATABRICKS_TARGET_DIR/start-integration.sh
 $SYSTEMD_STARTUP_LOGS_CONFIG
-$ARM_ENV_CONFIG
 MemoryLimit=1G
 # MemoryMax is only supported in systemd > 230 and replaces MemoryLimit. Some cloud dists do not have that version
 # MemoryMax=1G
