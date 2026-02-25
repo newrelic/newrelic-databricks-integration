@@ -5,6 +5,7 @@ import (
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkConfig "github.com/databricks/databricks-sdk-go/config"
+	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
 	"github.com/spf13/viper"
 )
 
@@ -39,6 +40,7 @@ func newDatabricksSdkConfig() *databricksSdk.Config {
 	 */
 	databricksWorkspaceHost := viper.GetString("databricks.workspaceHost")
 	if databricksWorkspaceHost != "" {
+		log.Debugf("configuring workspace host from config")
 		databricksConfig.Host = databricksWorkspaceHost
 	}
 
@@ -49,6 +51,8 @@ func newDatabricksSdkConfig() *databricksSdk.Config {
 }
 
 func configureWorkspaceAuth(config *databricksSdk.Config) {
+	log.Debugf("configuring authentication for Databricks workspace")
+
 	/*
 	 * Any of the variables below can be specified in any of the ways that
 	 * are supported by the Databricks SDK so if we don't explicitly find one
@@ -60,6 +64,10 @@ func configureWorkspaceAuth(config *databricksSdk.Config) {
 	// Prefer OAuth by looking for client ID in our config first
 	databricksOAuthClientId := viper.GetString("databricks.oauthClientId")
 	if databricksOAuthClientId != "" {
+		log.Debugf(
+			"OAuth client ID found in config, configuring OAuth M2M authentication",
+		)
+
 		/*
 		 * If an OAuth client ID was in our config we will at this point tell
 		 * the SDK to use OAuth M2M authentication. The secret may come from our
@@ -76,6 +84,7 @@ func configureWorkspaceAuth(config *databricksSdk.Config) {
 			"databricks.oauthClientSecret",
 		)
 		if databricksOAuthClientSecret != "" {
+			log.Debugf("OAuth client secret found in config")
 			config.ClientSecret = databricksOAuthClientSecret
 		}
 
@@ -85,6 +94,8 @@ func configureWorkspaceAuth(config *databricksSdk.Config) {
 	// Check for a PAT in our config next
 	databricksAccessToken := viper.GetString("databricks.accessToken")
 	if databricksAccessToken != "" {
+		log.Debugf("PAT found in config, configuring PAT authentication")
+
 		/*
 		* If the user didn't specify an OAuth client ID but does specify a PAT,
 		* we will at this point tell the SDK to use PAT authentication. Note
@@ -100,6 +111,10 @@ func configureWorkspaceAuth(config *databricksSdk.Config) {
     // Check for Azure client ID in auth settings in our config next
     databricksAzureClientId := viper.GetString("databricks.azureClientId")
     if databricksAzureClientId != "" {
+		log.Debugf(
+			"Azure client ID found in config, configuring Azure authentication",
+		)
+
         /*
 		 * If an Azure client ID was in our config we will at this point tell
 		 * the SDK to use either Azure MSI (managed identity) or Azure Entra
@@ -118,26 +133,37 @@ func configureWorkspaceAuth(config *databricksSdk.Config) {
 
         databricksAzureMsiEnabled := viper.GetBool("databricks.azureMsiEnabled")
         if databricksAzureMsiEnabled {
+			log.Debugf(
+				"Azure MSI enabled set to true, configuring Azure MSI authentication",
+			)
+
             config.Credentials = databricksSdkConfig.AzureMsiCredentials{}
 			config.AzureUseMSI = true
         } else {
+			log.Debugf(
+				"Azure MSI enabled set to false, configuring Azure Entra service principal authentication",
+			)
+
             config.Credentials =
                 databricksSdkConfig.AzureClientSecretCredentials{}
 			config.AzureUseMSI = false
 
             databricksAzureTenantId := viper.GetString("databricks.azureTenantId")
             if databricksAzureTenantId != "" {
+				log.Debugf("Azure tenant ID found in config")
                 config.AzureTenantID = databricksAzureTenantId
             }
 
             databricksAzureClientSecret := viper.GetString("databricks.azureClientSecret")
             if databricksAzureClientSecret != "" {
+				log.Debugf("Azure client secret found in config")
                 config.AzureClientSecret = databricksAzureClientSecret
             }
         }
 
         databricksAzureResourceId := viper.GetString("databricks.azureResourceId")
         if databricksAzureResourceId != "" {
+			log.Debugf("Azure Databricks resource ID found in config")
             config.AzureResourceID = databricksAzureResourceId
         }
 

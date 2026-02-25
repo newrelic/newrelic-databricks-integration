@@ -185,6 +185,17 @@ all-purpose cluster, perform the following steps.
 * If `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` is set to `true` but the
   [DBFS root](https://docs.databricks.com/aws/en/dbfs/#what-is-the-dbfs-root) is
   not enabled for your account and workspace, the integration may fail to start.
+* Before using `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` with
+  [Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+  or
+  [Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+  note that the Databricks Azure
+  [documentation](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#environment)
+  "recommends using [`NEW_RELIC_DATABRICKS_WORKSPACE_HOST`] and explicitly
+  assigning the identity to the workspace." Using
+  `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` instead "requires Contributor or
+  Owner permissions on the Azure resource, or a custom role with specific Azure
+  Databricks permissions."
 
 ## Deploy the integration remotely
 
