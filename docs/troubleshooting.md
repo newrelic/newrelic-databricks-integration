@@ -627,7 +627,7 @@ This message can be safely ignored.
 
 ## New Relic Diagnostics Notebook
 
-The [New Relic Diagnostics Notebook](../examples/new-relic-diagnostics.ipynb) is
+The [New Relic Diagnostics Notebook](../examples/New%20Relic%20Diagnostics.ipynb) is
 a Databricks
 [notebook](https://docs.databricks.com/aws/en/notebooks/) that can be used
 to help you diagnose issues with the Databricks Integration when the integration
@@ -639,7 +639,7 @@ is
 To install the New Relic Diagnostics Notebook, follow the steps to
 [import a notebook](https://docs.databricks.com/aws/en/notebooks/notebook-export-import#import-a-notebook),
 using the
-[New Relic Diagnostics Notebook](../examples/new-relic-diagnostics.ipynb) as the
+[New Relic Diagnostics Notebook](../examples/New%20Relic%20Diagnostics.ipynb) as the
 notebook file.
 
 ### Using the New Relic Diagnostics Notebook
