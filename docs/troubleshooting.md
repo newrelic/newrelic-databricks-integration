@@ -337,11 +337,113 @@ to see the error.
 
 **Solution:**
 
-Using
-[Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
-or
-[Microsoft Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp)
-to authenticate with Azure Databricks is currently not supported.
+To use
+[_Azure managed identity authentication_](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi),
+perform the following steps:
+
+If you have deployed the integration
+[to a Databricks cluster](./installation.md#deploy-the-integration-to-a-databricks-cluster):
+
+1. Follow the steps to
+   [set compute environment variables](https://learn.microsoft.com/en-us/azure/databricks/compute/configure#env-var)
+   to add or update the compute environment variables as follows:
+
+   ```sh
+   NEW_RELIC_DATABRICKS_AZURE_MSI_ENABLED=true
+   NEW_RELIC_DATABRICKS_AZURE_CLIENT_ID=[YOUR_MANAGED_IDENTITY_CLIENT_ID]
+   ```
+
+   Optionally, specify the environment variable
+   `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` to the Azure resource ID of your
+   Azure Databricks workspace. See the
+   [supported init script environment variables](./installation.md#supported-init-script-environment-variables)
+   notes for important information about specifying the Databricks Azure
+   resource ID.
+1. Ensure the environment variables `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID`,
+   `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET`, and
+   `NEW_RELIC_DATABRICKS_ACCESS_TOKEN` are not set.
+1. If your cluster is not running, click on the button labeled `Confirm` to
+   save your changes. Then, restart the cluster. If your cluster is already
+   running, click on the button labeled `Confirm and restart` to save your
+   changes and restart the cluster.
+
+If you have deployed the integration
+[remotely](./installation.md#deploy-the-integration-remotely):
+
+1. Set the following configuration parameters in the
+   [integration configuration](./configuration.md):
+
+   ```sh
+   azureMsiEnabled: true
+   azureClientId: "[YOUR_MANAGED_IDENTITY_CLIENT_ID]"
+   ```
+
+   Optionally, specify the
+   [`azureResourceId`](./configuration.md#azureresourceid) to the Azure resource
+   ID of your Azure Databricks workspace. See the
+   [`azureResourceId`](./configuration.md#azureresourceid) note for important
+   information about specifying the Databricks Azure resource ID.
+1. Ensure the [`oauthClientId`](./configuration.md#oauthclientid), the
+   [`oauthClientSecret`](./configuration.md#oauthclientsecret), and the
+   [`accessToken`](./configuration.md#accesstoken) configuration parameters (or
+   the corresponding environment variables) are not set.
+1. Restart the integration.
+
+To use
+[_Microsoft Entra service principal authentication_](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+perform the following steps:
+
+If you have deployed the integration
+[to a Databricks cluster](./installation.md#deploy-the-integration-to-a-databricks-cluster):
+
+1. Follow the steps to
+   [set compute environment variables](https://learn.microsoft.com/en-us/azure/databricks/compute/configure#env-var)
+   to add or update the compute environment variables as follows:
+
+   ```sh
+   NEW_RELIC_DATABRICKS_AZURE_MSI_ENABLED=false
+   NEW_RELIC_DATABRICKS_AZURE_CLIENT_ID=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_ID]
+   NEW_RELIC_DATABRICKS_AZURE_CLIENT_SECRET=[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_SECRET]
+   NEW_RELIC_DATABRICKS_AZURE_TENANT_ID=[YOUR_ENTRA_SERVICE_PRINCIPAL_TENANT_ID]
+   ```
+
+   Optionally, specify the environment variable
+   `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` to the Azure resource ID of your
+   Azure Databricks workspace. See the
+   [supported init script environment variables](./installation.md#supported-init-script-environment-variables)
+   notes for important information about specifying the Databricks Azure
+   resource ID.
+1. Ensure the environment variables `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_ID`,
+   `NEW_RELIC_DATABRICKS_OAUTH_CLIENT_SECRET`, and
+   `NEW_RELIC_DATABRICKS_ACCESS_TOKEN` are not set.
+1. If your cluster is not running, click on the button labeled `Confirm` to
+   save your changes. Then, restart the cluster. If your cluster is already
+   running, click on the button labeled `Confirm and restart` to save your
+   changes and restart the cluster.
+
+If you have deployed the integration
+[remotely](./installation.md#deploy-the-integration-remotely):
+
+1. Set the following configuration parameters in the
+   [integration configuration](./configuration.md):
+
+   ```sh
+   azureMsiEnabled: false
+   azureClientId: "[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_ID]"
+   azureClientSecret: "[YOUR_ENTRA_SERVICE_PRINCIPAL_CLIENT_SECRET]"
+   azureTenantId: "[YOUR_ENTRA_SERVICE_PRINCIPAL_TENANT_ID]"
+   ```
+
+   Optionally, specify the
+   [`azureResourceId`](./configuration.md#azureresourceid) to the Azure resource
+   ID of your Azure Databricks workspace. See the
+   [`azureResourceId`](./configuration.md#azureresourceid) note for important
+   information about specifying the Databricks Azure resource ID.
+1. Ensure the [`oauthClientId`](./configuration.md#oauthclientid), the
+   [`oauthClientSecret`](./configuration.md#oauthclientsecret), and the
+   [`accessToken`](./configuration.md#accesstoken) configuration parameters (or
+   the corresponding environment variables) are not set.
+1. Restart the integration.
 
 #### Other Causes of Missing Data for On-cluster Deployments
 
@@ -525,7 +627,7 @@ This message can be safely ignored.
 
 ## New Relic Diagnostics Notebook
 
-The [New Relic Diagnostics Notebook](../examples/new-relic-diagnostics.ipynb) is
+The [New Relic Diagnostics Notebook](../examples/New%20Relic%20Diagnostics.ipynb) is
 a Databricks
 [notebook](https://docs.databricks.com/aws/en/notebooks/) that can be used
 to help you diagnose issues with the Databricks Integration when the integration
@@ -537,7 +639,7 @@ is
 To install the New Relic Diagnostics Notebook, follow the steps to
 [import a notebook](https://docs.databricks.com/aws/en/notebooks/notebook-export-import#import-a-notebook),
 using the
-[New Relic Diagnostics Notebook](../examples/new-relic-diagnostics.ipynb) as the
+[New Relic Diagnostics Notebook](../examples/New%20Relic%20Diagnostics.ipynb) as the
 notebook file.
 
 ### Using the New Relic Diagnostics Notebook

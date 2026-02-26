@@ -125,6 +125,25 @@ all-purpose cluster, perform the following steps.
 * `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` - Set to `true` to capture
   the startup logs and
   [copy them to DBFS](./troubleshooting.md#copying-startup-logs-to-dbfs).
+* `NEW_RELIC_DATABRICKS_AZURE_MSI_ENABLED` - Set to `true` to authenticate using
+  [Azure managed identities](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+* `NEW_RELIC_DATABRICKS_AZURE_TENANT_ID` - Set to your Microsoft Entra tenant
+  ID to authenticate using a
+  [Microsoft Entra service principal](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp)
+* `NEW_RELIC_DATABRICKS_AZURE_CLIENT_ID` - Set to the client ID of your managed
+  identity or service principal to authenticate using
+  [Azure managed identities](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+  or a
+  [Microsoft Entra service principal](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+  respectively
+* `NEW_RELIC_DATABRICKS_AZURE_CLIENT_SECRET` - Set to the client secret of your
+  service principal to authenticate using a
+  [Microsoft Entra service principal](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp)
+* `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` - Set to the Azure resource ID for
+  your Azure Databricks workspace. Required to authenticate using
+  [Azure managed identities](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi).
+  Optional to authenticate using a
+  [Microsoft Entra service principal](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp).
 
 **NOTE:**
 * In most cases, the [init script](../init/cluster_init_integration.sh) should
@@ -166,6 +185,17 @@ all-purpose cluster, perform the following steps.
 * If `NEW_RELIC_DATABRICKS_COPY_STARTUP_LOGS_ENABLED` is set to `true` but the
   [DBFS root](https://docs.databricks.com/aws/en/dbfs/#what-is-the-dbfs-root) is
   not enabled for your account and workspace, the integration may fail to start.
+* Before using `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` with
+  [Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+  or
+  [Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+  note that the Databricks Azure
+  [documentation](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#environment)
+  "recommends using [`NEW_RELIC_DATABRICKS_WORKSPACE_HOST`] and explicitly
+  assigning the identity to the workspace." Using
+  `NEW_RELIC_DATABRICKS_AZURE_RESOURCE_ID` instead "requires Contributor or
+  Owner permissions on the Azure resource, or a custom role with specific Azure
+  Databricks permissions."
 
 ## Deploy the integration remotely
 
