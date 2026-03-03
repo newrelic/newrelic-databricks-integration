@@ -16,6 +16,11 @@ databricks:
   accessToken: [YOUR_DATABRICKS_PERSONAL_ACCESS_TOKEN]
   oauthClientId: [YOUR_DATABRICKS_SERVICE_PRINCIPAL_OAUTH_CLIENT_ID]
   oauthClientSecret: [YOUR_DATABRICKS_SERVICE_PRINCIPAL_OAUTH_CLIENT_SECRET]
+  azureMsiEnabled: false
+  azureClientId: [YOUR_AZURE_CLIENT_ID]
+  azureClientSecret: [YOUR_AZURE_CLIENT_SECRET]
+  azureTenantId: [YOUR_AZURE_TENANT_ID]
+  azureResourceId: [YOUR_AZURE_RESOURCE_ID]
   sqlStatementTimeout: 30
   usage:
     enabled: true

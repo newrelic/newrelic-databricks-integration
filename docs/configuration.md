@@ -258,7 +258,7 @@ See the [authentication documentation](./authentication.md) for more details.
 | --- | --- | --- | --- |
 | Databricks service principal secret | string | N | N/a |
 
-When the [`oauthClientId`](#oauthclientid) is set, this parameter must be set to
+When the [`oauthClientId`](#oauthclientid) is set, this parameter may be set to
 specify the service principal secret associated with the [service principal](https://docs.databricks.com/en/admin/users-groups/service-principals.html#what-is-a-service-principal)
 used when [using service principal authentication via OAuth](https://docs.databricks.com/en/dev-tools/auth/oauth-m2m.html).
 The value of this parameter will be used as the OAuth client secret.
@@ -269,6 +269,116 @@ supported by the [Databricks unified authentication](https://docs.databricks.com
 standard.
 
 See the [authentication documentation](./authentication.md) for more details.
+
+#### `azureMsiEnabled`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Flag to enable Azure managed identity authentication | `true` / `false` | N | `false` |
+
+When the [`azureClientId`](#azureclientid) is set, this parameter can be set
+to `true` to authenticate using
+[Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi).
+If the [`azureClientId`](#azureclientid) is set, but this parameter is not
+specified or set to `false`, the integration will authenticate using
+[Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp).
+
+The flag to configure Azure managed identity authentication (`ARM_USE_MSI`) can
+also be supplied using the relevant
+[environment variables](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#environment)
+and
+[configuration profile fields](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#profile).
+
+See the [authentication documentation](./authentication.md) for more details.
+
+#### `azureClientId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Client ID to use with Azure managed identity or Azure Entra service principal authentication | string | N | N/a |
+
+When set, the integration will use either
+[Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+or
+[Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+depending on the value of the [`azureMsiEnabled`](#azuremsienabled) flag or
+the associated Databricks environment variable or configuration field. The value
+of this parameter will be used as Azure client ID.
+
+The Azure client ID can also be supplied using the relevant
+[environment variables](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#environment)
+and
+[configuration profile fields](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#profile).
+
+See the [authentication documentation](./authentication.md) for more details.
+
+#### `azureClientSecret`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Client secret to use with Azure Entra service principal authentication | string | N | N/a |
+
+When the [`azureClientId`](#azureclientid) is set and
+[`azureMsiEnabled`](#azuremsienabled) is missing or set to `false`, this
+parameter may be set to specify the Azure Entra service principal client secret
+to use with
+[Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp).
+
+The Azure Entra service principal client secret can also be supplied using the
+relevant
+[environment variables](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#environment-variables)
+and
+[configuration profile fields](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#configuration-profiles).
+
+See the [authentication documentation](./authentication.md) for more details.
+
+#### `azureTenantId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Tenant ID to use with Azure Entra service principal authentication | string | N | N/a |
+
+When the [`azureClientId`](#azureclientid) is set and
+[`azureMsiEnabled`](#azuremsienabled) is missing or set to `false`, this
+parameter may be set to specify the tenant ID to use with
+[Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp).
+
+The tenant ID can also be supplied using the relevant
+[environment variables](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#environment-variables)
+and
+[configuration profile fields](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#configuration-profiles).
+
+See the [authentication documentation](./authentication.md) for more details.
+
+#### `azureResourceId`
+
+| Description | Valid Values | Required | Default |
+| --- | --- | --- | --- |
+| Azure resource ID for your Azure Databricks workspace to use with Azure managed identity or Azure Entra service principal authentication | string | N | N/a |
+
+When authenticating with
+[Azure managed identity authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi)
+or
+[Azure Entra service principal authentication](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp),
+this parameter may be set to specify the Azure resource ID of your Azure
+Databricks workspace.
+
+The Azure resource ID for your Azure Databricks workspace can also be supplied
+using the relevant
+[environment variables](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#environment-variables)
+and
+[configuration profile fields](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-sp#configuration-profiles).
+
+See the [authentication documentation](./authentication.md) for more details.
+
+**NOTE:** Before using the this configuration parameter, note that the
+Databricks Azure
+[documentation](https://learn.microsoft.com/en-us/azure/databricks/dev-tools/auth/azure-mi#environment)
+"recommends [specifying the workspace host (for example using the
+[`workspaceHost`](#workspacehost) configuration parameter)] and explicitly
+assigning the identity to the workspace." Using this configuration parameter
+instead "requires Contributor or Owner permissions on the Azure resource, or a
+custom role with specific Azure Databricks permissions."
 
 #### `sqlStatementTimeout`
 
