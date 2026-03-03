@@ -8,10 +8,13 @@ import (
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkConfig "github.com/databricks/databricks-sdk-go/config"
 	databricksSdkListing "github.com/databricks/databricks-sdk-go/listing"
+	databricksSdkLogger "github.com/databricks/databricks-sdk-go/logger"
 	databricksSdkCompute "github.com/databricks/databricks-sdk-go/service/compute"
 	databricksSdkJobs "github.com/databricks/databricks-sdk-go/service/jobs"
 	databricksSdkPipelines "github.com/databricks/databricks-sdk-go/service/pipelines"
 	databricksSdkSql "github.com/databricks/databricks-sdk-go/service/sql"
+	"github.com/newrelic/newrelic-labs-sdk/v2/pkg/integration/log"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -98,12 +101,99 @@ type DatabricksWorkspace interface {
     CancelExecution(ctx context.Context, statementId string) error
 }
 
+type DatabricksLogger struct {
+}
+
+func (l *DatabricksLogger) Enabled(
+    _ context.Context,
+    level databricksSdkLogger.Level,
+) bool {
+    // Accessing the RootLogger directly here is not ideal but the Labs SDK does
+    // not expose an IsLevelEnabled method on the Logger interface.
+    switch level {
+    case databricksSdkLogger.LevelTrace, databricksSdkLogger.LevelDebug:
+        // We treat trace and debug as the same log level since the Labs SDK
+        // does not have a trace log level.
+        return log.RootLogger.IsLevelEnabled(logrus.DebugLevel)
+    case databricksSdkLogger.LevelInfo:
+        return log.RootLogger.IsLevelEnabled(logrus.InfoLevel)
+    case databricksSdkLogger.LevelWarn:
+        return log.RootLogger.IsLevelEnabled(logrus.WarnLevel)
+    case databricksSdkLogger.LevelError:
+        return log.RootLogger.IsLevelEnabled(logrus.ErrorLevel)
+    default:
+        // If we get an unknown log level, we'll just log it. It's better to
+        // log something than nothing in this case and we don't want to error
+        // out the entire integration just because of an unknown log level.
+        return true
+    }
+}
+
+func (l *DatabricksLogger) Tracef(
+    ctx context.Context,
+    format string,
+    v ...any,
+) {
+    // We treat trace and debug as the same log level since the Labs SDK
+    // does not have a trace log level.
+    if !l.Enabled(ctx, databricksSdkLogger.LevelDebug) {
+        return
+    }
+    log.Debugf("databricks-sdk: " + format, v...)
+}
+
+func (l *DatabricksLogger) Debugf(
+    ctx context.Context,
+    format string,
+    v ...any,
+) {
+    if !l.Enabled(ctx, databricksSdkLogger.LevelDebug) {
+        return
+    }
+    log.Debugf("databricks-sdk: " + format, v...)
+}
+
+func (l *DatabricksLogger) Infof(
+    ctx context.Context,
+    format string,
+    v ...any,
+) {
+    if !l.Enabled(ctx, databricksSdkLogger.LevelInfo) {
+        return
+    }
+    log.Infof("databricks-sdk: " + format, v...)
+}
+
+func (l *DatabricksLogger) Warnf(
+    ctx context.Context,
+    format string,
+    v ...any,
+) {
+    if !l.Enabled(ctx, databricksSdkLogger.LevelWarn) {
+        return
+    }
+    log.Warnf("databricks-sdk: " + format, v...)
+}
+
+func (l *DatabricksLogger) Errorf(
+    ctx context.Context,
+    format string,
+    v ...any,
+) {
+    if !l.Enabled(ctx, databricksSdkLogger.LevelError) {
+        return
+    }
+    log.Errorf("databricks-sdk: " + format, v...)
+}
+
 type databricksWorkspaceImpl struct {
     w *databricksSdk.WorkspaceClient
     pipelineEventClient *pipelineEventClient
 }
 
 func newDatabricksWorkspaceImpl() (DatabricksWorkspace, error) {
+    databricksSdkLogger.DefaultLogger = &DatabricksLogger{}
+
     w, err := databricksSdk.NewWorkspaceClient(newDatabricksSdkConfig())
 	if err != nil {
 		return nil, err
