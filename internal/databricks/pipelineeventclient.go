@@ -7,6 +7,8 @@ import (
 
 	databricksSdk "github.com/databricks/databricks-sdk-go"
 	databricksSdkClient "github.com/databricks/databricks-sdk-go/client"
+	databricksSdkConfig "github.com/databricks/databricks-sdk-go/config"
+	databricksSdkHttpClient "github.com/databricks/databricks-sdk-go/httpclient"
 	databricksSdkListing "github.com/databricks/databricks-sdk-go/listing"
 	databricksSdkMarshal "github.com/databricks/databricks-sdk-go/marshal"
 	databricksSdkPipelines "github.com/databricks/databricks-sdk-go/service/pipelines"
@@ -33,14 +35,18 @@ func newPipelineEventClient(w *databricksSdk.WorkspaceClient) (*pipelineEventCli
 	// Since the WorkspaceClient does not expose the DatabricksClient that it
 	// uses, we need to create our own DatabricksClient.
 	//
-	// We do so using the following 10 lines which are taken from the
-	// WorkspaceClient code at https://github.com/databricks/databricks-sdk-go/blob/v0.60.0/workspace_client.go#L1161
-	apiClient, err := cfg.NewApiClient()
+	// We do so following a similar pattern as in NewWorkspaceClient in
+	// https://github.com/databricks/databricks-sdk-go/blob/main/workspace_client.go
+	// (create an HTTP ApiClient then use it to create a DatabricksClient).
+	clientCfg, err := databricksSdkConfig.HTTPClientConfigFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	databricksClient, err := databricksSdkClient.NewWithClient(cfg, apiClient)
+	databricksClient, err := databricksSdkClient.NewWithClient(
+		cfg,
+		databricksSdkHttpClient.NewApiClient(clientCfg),
+	)
 	if err != nil {
 		return nil, err
 	}
