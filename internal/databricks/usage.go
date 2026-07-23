@@ -210,7 +210,7 @@ func importBillingListPricesTable(
 		if err != nil {
 			log.Warnf("error reading table api response: %v", err)
 		} else {
-			log.Debugf(string(bytes))
+			log.Debugf("%s", string(bytes))
 		}
 	}
 

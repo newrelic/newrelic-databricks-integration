@@ -45,7 +45,7 @@ func executeStatementOnWarehouse(
 
 	if execResp.Status != nil &&
 		execResp.Status.State == databricksSdkSql.StatementStateFailed {
-		return nil, fmt.Errorf(execResp.Status.Error.Message)
+		return nil, fmt.Errorf("%s", execResp.Status.Error.Message)
 	}
 
 	statementId := execResp.StatementId
@@ -207,7 +207,7 @@ func getStatementStatus(
 
 	if status == databricksSdkSql.StatementStateFailed {
 		// sql statement execution failed
-		return nil, 0, false, fmt.Errorf(getResp.Status.Error.Message)
+		return nil, 0, false, fmt.Errorf("%s", getResp.Status.Error.Message)
 	}
 
 	if status == databricksSdkSql.StatementStateCanceled ||
