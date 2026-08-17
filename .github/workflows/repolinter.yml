@@ -2,6 +2,10 @@
 # workflow_dispatch to work properly
 name: Repolinter Action
 
+permissions:
+  contents: read
+  issues: write
+
 # NOTE: This workflow will ONLY check the default branch!
 # Currently there is no elegant way to specify the default
 # branch in the event filtering, so branches are instead
