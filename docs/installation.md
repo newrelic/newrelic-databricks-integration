@@ -205,7 +205,9 @@ environment outside Databricks.
 The following operating systems and architectures are supported.
 
 * Linux / amd64
+* Linux / arm64
 * Windows / amd64
+* Windows / arm64
 
 To install the Databricks Integration remotely on a supported host environment,
 perform the following steps.

@@ -354,7 +354,22 @@ NEW_RELIC_DATABRICKS_STARTUP_RETRIES=${NEW_RELIC_DATABRICKS_STARTUP_RETRIES:-15}
 # Define the version, download dir and target dir
 NEW_RELIC_DATABRICKS_TMP_DIR="/tmp/newrelic-databricks-integration"
 NEW_RELIC_DATABRICKS_TARGET_DIR="/databricks/driver/newrelic"
-NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE="newrelic-databricks-integration_Linux_x86_64.tar.gz"
+
+# Determine the release archive to download based on the underlying architecture
+NEW_RELIC_DATABRICKS_UNAME_ARCH=$(uname -m)
+case "$NEW_RELIC_DATABRICKS_UNAME_ARCH" in
+  x86_64)
+    NEW_RELIC_DATABRICKS_ARCH="x86_64"
+    ;;
+  aarch64|arm64)
+    NEW_RELIC_DATABRICKS_ARCH="arm64"
+    ;;
+  *)
+    echo "Unsupported architecture: $NEW_RELIC_DATABRICKS_UNAME_ARCH" >&2
+    exit 1
+    ;;
+esac
+NEW_RELIC_DATABRICKS_RELEASE_ARCHIVE="newrelic-databricks-integration_Linux_${NEW_RELIC_DATABRICKS_ARCH}.tar.gz"
 
 # Download the newrelic databricks integration release archive, unpack it, and
 # move the binary into place
